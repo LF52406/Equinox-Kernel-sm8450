@@ -1,4 +1,4 @@
-name: Equinox upstream 5.10.269 merge worker
+name: Equinox 5.10.269 validation
 
 on:
   pull_request:
@@ -7,89 +7,154 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  merge-upstream:
+  build-mondrian-kernel:
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
     steps:
-      - name: Checkout protected staging branch
+      - name: Checkout Equinox 5.10.269 staging
         uses: actions/checkout@v4
         with:
           ref: equinox-5.10.269-staging
-          fetch-depth: 6
-          persist-credentials: true
+          fetch-depth: 2
 
-      - name: Verify Equinox 5.10.260 baseline
+      - name: Verify immutable inputs
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED_HEAD="149fa3416c693f2ccfb22ad19c433375a72e78f7"
-          QCOM_260="815e317bce6a2e4229ca99aeb905fa9a9e622964"
+          BASE="149fa3416c693f2ccfb22ad19c433375a72e78f7"
+          STAGING="4730daa0e2e6261d027c586769b96fe8cd3d3186"
 
-          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          git cat-file -e "${QCOM_260}^{commit}"
-          git merge-base --is-ancestor "$QCOM_260" HEAD
-          test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -n1)" = "260"
+          test "$(git rev-parse HEAD)" = "$STAGING"
+          test "$(sed -n 's/^VERSION = //p' Makefile | head -n1)" = "5"
+          test "$(sed -n 's/^PATCHLEVEL = //p' Makefile | head -n1)" = "10"
+          test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -n1)" = "269"
 
-          echo "Baseline verified: $(git rev-parse --short=12 HEAD), Linux 5.10.260"
+          git cat-file -e "${BASE}^{commit}"
+          git merge-base --is-ancestor "$BASE" HEAD
 
-      - name: Fetch LineageOS Qualcomm 5.10.269 upstream
+          # Device-facing configuration and KMI symbol lists must not be silently
+          # rewritten by an LTS merge. These are the same inputs used by mondrian's
+          # Android BoardConfig.
+          git diff --exit-code "$BASE" HEAD -- \
+            arch/arm64/configs/vendor/waipio_GKI.config \
+            arch/arm64/configs/vendor/xiaomi_GKI.config \
+            arch/arm64/configs/vendor/mondrian_GKI.config \
+            arch/arm64/configs/vendor/debugfs.config \
+            android/abi_gki_aarch64_qcom \
+            android/abi_gki_aarch64_xiaomi \
+            modules.list.msm.waipio \
+            modules.vendor_blocklist.msm.waipio \
+            build.config.common
+
+          echo "Source invariants verified."
+
+      - name: Install kernel build dependencies
         shell: bash
         run: |
           set -euo pipefail
-          QCOM_269="d5558ead101620fe5ace306a6ef5f5daa137d257"
-          QCOM_260="815e317bce6a2e4229ca99aeb905fa9a9e622964"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libelf-dev dwarves cpio rsync xz-utils zstd
 
-          git remote add qcom-upstream https://github.com/LineageOS/android_kernel_qcom_sm8450.git
-          git fetch --no-tags --depth=1700 qcom-upstream "$QCOM_269"
-          git cat-file -e "${QCOM_269}^{commit}"
-
-          MERGE_BASE="$(git merge-base HEAD "$QCOM_269")"
-          echo "Detected merge base: $MERGE_BASE"
-          test "$MERGE_BASE" = "$QCOM_260"
-
-      - name: Merge 5.10.269 and audit conflicts
+      - name: Install Android clang-r416183b
         shell: bash
         run: |
           set -euo pipefail
-          QCOM_269="d5558ead101620fe5ace306a6ef5f5daa137d257"
+          mkdir -p "$RUNNER_TEMP/android-clang"
+          ARCHIVE="$RUNNER_TEMP/clang-r416183b.tar.gz"
+          URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12L-d2-s2-release/clang-r416183b.tar.gz"
 
-          git config user.name "LF52406 Equinox Upstream Bot"
-          git config user.email "LF52406@users.noreply.github.com"
-
-          set +e
-          git merge --no-ff --no-commit "$QCOM_269"
-          MERGE_RC=$?
-          set -e
-
-          if [ "$MERGE_RC" -ne 0 ]; then
-            echo "::error::Upstream merge has conflicts. Nothing will be pushed."
-            echo "===== UNMERGED FILES ====="
-            git diff --name-only --diff-filter=U
-            echo "===== CONFLICT SUMMARY ====="
-            git status --short
-            echo "===== COMBINED CONFLICT DIFF ====="
-            git diff --cc --no-ext-diff | sed -n '1,3000p'
-            git merge --abort || true
-            exit 2
+          if curl -fL --retry 4 --retry-delay 5 "$URL" -o "$ARCHIVE"; then
+            tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP/android-clang"
+          else
+            echo "Archive download failed; falling back to a sparse Git checkout."
+            rm -rf "$RUNNER_TEMP/android-clang"
+            git clone --depth=1 --filter=blob:none --sparse \
+              --branch android12L-d2-s2-release \
+              https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+              "$RUNNER_TEMP/clang-prebuilts"
+            git -C "$RUNNER_TEMP/clang-prebuilts" sparse-checkout set clang-r416183b
+            mv "$RUNNER_TEMP/clang-prebuilts/clang-r416183b" "$RUNNER_TEMP/android-clang"
           fi
 
-          echo "===== MERGE SUMMARY ====="
-          git status --short
-          echo "Changed files: $(git diff --cached --name-only | wc -l)"
+          test -x "$RUNNER_TEMP/android-clang/bin/clang"
+          echo "$RUNNER_TEMP/android-clang/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/android-clang/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/android-clang/bin/clang" --version
+          "$RUNNER_TEMP/android-clang/bin/ld.lld" --version
 
-          test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -n1)" = "269"
-          git diff --cached --check
+      - name: Generate mondrian kernel configuration exactly like Lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export TARGET_PRODUCT=mondrian
+          MAKE_ARGS=(O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld TARGET_PRODUCT=mondrian)
 
-      - name: Commit verified upstream merge
+          rm -rf out
+          mkdir -p out
+
+          # Lineage kernel.mk uses the first TARGET_KERNEL_CONFIG as the base,
+          # then merges each *.config fragment followed by olddefconfig.
+          cp arch/arm64/configs/gki_defconfig out/.config
+          make "${MAKE_ARGS[@]}" olddefconfig
+
+          for fragment in \
+            arch/arm64/configs/vendor/waipio_GKI.config \
+            arch/arm64/configs/vendor/xiaomi_GKI.config \
+            arch/arm64/configs/vendor/mondrian_GKI.config \
+            arch/arm64/configs/vendor/debugfs.config; do
+            scripts/kconfig/merge_config.sh -m -O out out/.config "$fragment"
+            make "${MAKE_ARGS[@]}" olddefconfig
+          done
+
+          # Hard assertions for device-critical options from mondrian/xiaomi config.
+          grep -qx 'CONFIG_ARCH_WAIPIO=y' out/.config
+          grep -qx 'CONFIG_MI_CHARGER_M81=y' out/.config
+          grep -qx 'CONFIG_MI_THERMAL_MULTI_CHARGE=y' out/.config
+          grep -qx 'CONFIG_INPUT_AW862XX_HAPTIC=m' out/.config
+          grep -qx 'CONFIG_INPUT_AW86927_HAPTIC=m' out/.config
+          grep -qx 'CONFIG_FINGERPRINT_GOODIX_TEE=m' out/.config
+          grep -qx 'CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=m' out/.config
+          grep -qx 'CONFIG_EROFS_FS=y' out/.config
+
+          echo "Mondrian configuration generated successfully."
+
+      - name: Build Image and in-tree modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export TARGET_PRODUCT=mondrian
+          MAKE_ARGS=(O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld TARGET_PRODUCT=mondrian)
+
+          make -j2 "${MAKE_ARGS[@]}" Image modules
+
+          test -s out/arch/arm64/boot/Image
+          test -s out/vmlinux
+          test -s out/Module.symvers
+
+          echo "Kernel release: $(make -s "${MAKE_ARGS[@]}" kernelrelease)"
+          ls -lh out/arch/arm64/boot/Image out/vmlinux out/Module.symvers
+
+      - name: Post-build sanity checks
         shell: bash
         run: |
           set -euo pipefail
 
-          git commit -m "Merge LineageOS kernel upstream through 5.10.269" \
-            -m "Merge LineageOS/android_kernel_qcom_sm8450 android13-5.10-waipio at d5558ead101620fe5ace306a6ef5f5daa137d257 while preserving the existing Xiaomi/Equinox tree."
+          if grep -R -n -E '<<<<<<<|=======|>>>>>>>' \
+              --exclude-dir=.git --exclude='*.orig' --exclude='*.rej' .; then
+            echo "::error::Merge conflict markers found in source tree."
+            exit 1
+          fi
 
-          git push origin HEAD:equinox-5.10.269-staging
+          test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -n1)" = "269"
+          echo "Equinox 5.10.269 core build validation passed."
