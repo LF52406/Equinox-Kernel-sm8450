@@ -19,6 +19,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
+#include <linux/bitops.h>
 #include <linux/soc/qcom/panel_event_notifier.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38)
@@ -681,6 +682,41 @@ static ssize_t goodix_ts_irq_info_show(struct device *dev,
 
 	offset += r;
 	r = scnprintf(&buf[offset], PAGE_SIZE - offset,
+			"touch-guard-invalid-frames:%lld\n",
+			(long long)atomic64_read(&core_data->touch_guard.invalid_frames));
+	if (r < 0)
+		return -EINVAL;
+
+	offset += r;
+	r = scnprintf(&buf[offset], PAGE_SIZE - offset,
+			"touch-guard-suppressed-contacts:%lld\n",
+			(long long)atomic64_read(&core_data->touch_guard.suppressed_contacts));
+	if (r < 0)
+		return -EINVAL;
+
+	offset += r;
+	r = scnprintf(&buf[offset], PAGE_SIZE - offset,
+			"touch-guard-confirmed-contacts:%lld\n",
+			(long long)atomic64_read(&core_data->touch_guard.confirmed_contacts));
+	if (r < 0)
+		return -EINVAL;
+
+	offset += r;
+	r = scnprintf(&buf[offset], PAGE_SIZE - offset,
+			"gesture-transition-drops:%lld\n",
+			(long long)atomic64_read(&core_data->touch_guard.transition_gesture_drops));
+	if (r < 0)
+		return -EINVAL;
+
+	offset += r;
+	r = scnprintf(&buf[offset], PAGE_SIZE - offset,
+			"gesture-reporting:%s\n",
+			atomic_read(&core_data->gesture_reporting_allowed) ? "enabled" : "blocked");
+	if (r < 0)
+		return -EINVAL;
+
+	offset += r;
+	r = scnprintf(&buf[offset], PAGE_SIZE - offset,
 		     "echo 0/1 > irq_info to disable/enable irq\n");
 	if (r < 0)
 		return -EINVAL;
@@ -1207,58 +1243,196 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 	mutex_unlock(&dev->mutex);
 }
 
+static unsigned int goodix_touch_mask_count(u16 mask)
+{
+	unsigned int count = 0;
+
+	while (mask) {
+		count += mask & 1;
+		mask >>= 1;
+	}
+
+	return count;
+}
+
+static void goodix_ts_release_touch_slots_locked(struct input_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
+		input_mt_slot(dev, i);
+		input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
+	}
+	input_report_key(dev, BTN_TOUCH, 0);
+	input_mt_sync_frame(dev);
+	input_sync(dev);
+}
+
+static bool goodix_ts_validate_touch_frame(struct goodix_ts_core *cd,
+		struct goodix_touch_data *touch_data, u16 *raw_mask)
+{
+	unsigned int max_x = cd->ic_info.other.screen_max_x;
+	unsigned int max_y = cd->ic_info.other.screen_max_y;
+	unsigned int parsed = 0;
+	u16 mask = 0;
+	int i;
+
+	if (touch_data->touch_num < 0 ||
+			touch_data->touch_num > GOODIX_MAX_TOUCH)
+		return false;
+
+	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
+		if (touch_data->coords[i].status != TS_TOUCH)
+			continue;
+
+		parsed++;
+		mask |= BIT(i);
+
+		/* Validate raw controller coordinates before scaling/inversion. */
+		if ((max_x && touch_data->coords[i].x > max_x) ||
+				(max_y && touch_data->coords[i].y > max_y))
+			return false;
+	}
+
+	/*
+	 * The parser stores contacts by hardware ID. A mismatch here also
+	 * detects duplicate IDs in one controller frame because two points
+	 * would collapse onto one slot while touch_num would still count both.
+	 */
+	if (parsed != touch_data->touch_num)
+		return false;
+
+	*raw_mask = mask;
+	return true;
+}
+
 static void goodix_ts_report_finger(struct input_dev *dev,
 		struct goodix_touch_data *touch_data,
 		bool invert_xy)
 {
 	struct goodix_ts_core *cd = input_get_drvdata(dev);
-	unsigned int touch_num = touch_data->touch_num;
-	int i;
+	struct goodix_touch_guard *guard = &cd->touch_guard;
+	u16 raw_mask = 0;
+	u16 old_reported;
+	u16 old_candidates;
+	u16 promoted;
+	u16 dropped;
+	u16 new_candidates;
+	u16 new_reported;
+	unsigned int x;
+	unsigned int y;
+	unsigned int w;
 	int resolution_factor;
+	int i;
 
 	mutex_lock(&dev->mutex);
 
-	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
-		if (touch_data->coords[i].status == TS_TOUCH) {
-			/*
-				Make sure the Touch function works properly regardless of
-				whether the TouchIC firmware supports the super-resolution
-				scanning function
-			*/
-			if (cd->ic_info.other.screen_max_x > cd->board_data.panel_max_x) {
-				resolution_factor = cd->ic_info.other.screen_max_x / cd->board_data.panel_max_x;
-				touch_data->coords[i].x /= resolution_factor;
-				touch_data->coords[i].y /= resolution_factor;
-			} else {
-				resolution_factor = cd->board_data.panel_max_x / cd->ic_info.other.screen_max_x;
-				touch_data->coords[i].x *= resolution_factor;
-				touch_data->coords[i].y *= resolution_factor;
-			}
+	if (!goodix_ts_validate_touch_frame(cd, touch_data, &raw_mask)) {
+		atomic64_inc(&guard->invalid_frames);
 
-			if (invert_xy)
-				swap(touch_data->coords[i].x,
-						touch_data->coords[i].y);
-
-			ts_debug("report: id[%d], x %d, y %d, w %d", i,
-				touch_data->coords[i].x,
-				touch_data->coords[i].y,
-				touch_data->coords[i].w);
-
-			input_mt_slot(dev, i);
-			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
-			input_report_abs(dev, ABS_MT_POSITION_X,
-					touch_data->coords[i].x);
-			input_report_abs(dev, ABS_MT_POSITION_Y,
-					touch_data->coords[i].y);
-			input_report_abs(dev, ABS_MT_TOUCH_MAJOR,
-					touch_data->coords[i].w);
-		} else {
-			input_mt_slot(dev, i);
-			input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
+		if (guard->candidate_mask) {
+			atomic64_add(goodix_touch_mask_count(guard->candidate_mask),
+					&guard->suppressed_contacts);
+			guard->candidate_mask = 0;
 		}
+
+		if (guard->invalid_frame_streak < U8_MAX)
+			guard->invalid_frame_streak++;
+
+		/*
+		 * Quarantine one malformed frame without changing Linux input
+		 * state. If corruption persists for a second frame, release all
+		 * slots so a stale contact can never remain stuck indefinitely.
+		 */
+		if (guard->invalid_frame_streak >= 2 && guard->reported_mask) {
+			goodix_ts_release_touch_slots_locked(dev);
+			guard->reported_mask = 0;
+		}
+
+		ts_debug("reject malformed touch frame, touch_num=%d streak=%u",
+			touch_data->touch_num, guard->invalid_frame_streak);
+		mutex_unlock(&dev->mutex);
+		return;
 	}
 
-	input_report_key(dev, BTN_TOUCH, touch_num > 0 ? 1 : 0);
+	guard->invalid_frame_streak = 0;
+	old_reported = guard->reported_mask;
+	old_candidates = guard->candidate_mask;
+
+	/*
+	 * A new hardware contact is never exposed immediately. It first
+	 * becomes a candidate and is promoted only if the same hardware ID is
+	 * still present in the following controller frame. Confirmed contacts
+	 * and releases are not delayed. At 240/480 Hz this adds only one
+	 * controller frame (about 4.2/2.1 ms) to a new DOWN event while
+	 * eliminating transient checksum-valid ghost contacts before Android.
+	 */
+	promoted = old_candidates & raw_mask;
+	dropped = old_candidates & ~raw_mask;
+	new_candidates = raw_mask & ~(old_reported | old_candidates);
+	new_reported = (old_reported & raw_mask) | promoted;
+
+	if (promoted)
+		atomic64_add(goodix_touch_mask_count(promoted),
+				&guard->confirmed_contacts);
+	if (dropped)
+		atomic64_add(goodix_touch_mask_count(dropped),
+				&guard->suppressed_contacts);
+
+	guard->reported_mask = new_reported;
+	guard->candidate_mask = new_candidates;
+
+	if (dropped)
+		ts_debug("suppressed transient touch mask 0x%04x", dropped);
+
+	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
+		input_mt_slot(dev, i);
+
+		if (!(new_reported & BIT(i))) {
+			input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
+			continue;
+		}
+
+		x = touch_data->coords[i].x;
+		y = touch_data->coords[i].y;
+		w = touch_data->coords[i].w;
+
+		/*
+		 * Make sure the Touch function works properly regardless of
+		 * whether the TouchIC firmware supports the super-resolution
+		 * scanning function. Keep the raw frame immutable so integrity
+		 * validation always reasons about controller coordinates.
+		 */
+		if (cd->ic_info.other.screen_max_x &&
+				cd->board_data.panel_max_x &&
+				cd->ic_info.other.screen_max_x !=
+					cd->board_data.panel_max_x) {
+			if (cd->ic_info.other.screen_max_x >
+					cd->board_data.panel_max_x) {
+				resolution_factor = cd->ic_info.other.screen_max_x /
+					cd->board_data.panel_max_x;
+				x /= resolution_factor;
+				y /= resolution_factor;
+			} else {
+				resolution_factor = cd->board_data.panel_max_x /
+					cd->ic_info.other.screen_max_x;
+				x *= resolution_factor;
+				y *= resolution_factor;
+			}
+		}
+
+		if (invert_xy)
+			swap(x, y);
+
+		ts_debug("report: id[%d], x %d, y %d, w %d", i, x, y, w);
+
+		input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
+		input_report_abs(dev, ABS_MT_POSITION_X, x);
+		input_report_abs(dev, ABS_MT_POSITION_Y, y);
+		input_report_abs(dev, ABS_MT_TOUCH_MAJOR, w);
+	}
+
+	input_report_key(dev, BTN_TOUCH, new_reported ? 1 : 0);
 	input_sync(dev);
 
 	mutex_unlock(&dev->mutex);
@@ -1773,20 +1947,12 @@ int goodix_ts_esd_init(struct goodix_ts_core *cd)
 static void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 {
 	struct input_dev *input_dev = core_data->input_dev;
-	int i;
 
 	mutex_lock(&input_dev->mutex);
-
-	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
-		input_mt_slot(input_dev, i);
-		input_mt_report_slot_state(input_dev,
-				MT_TOOL_FINGER,
-				false);
-	}
-	input_report_key(input_dev, BTN_TOUCH, 0);
-	input_mt_sync_frame(input_dev);
-	input_sync(input_dev);
-
+	goodix_ts_release_touch_slots_locked(input_dev);
+	core_data->touch_guard.reported_mask = 0;
+	core_data->touch_guard.candidate_mask = 0;
+	core_data->touch_guard.invalid_frame_streak = 0;
 	mutex_unlock(&input_dev->mutex);
 }
 
@@ -1805,6 +1971,7 @@ static int goodix_ts_suspend(struct goodix_ts_core *core_data)
 		return 0;
 
 	ts_info("Suspend start");
+	atomic_set(&core_data->gesture_reporting_allowed, 0);
 	mutex_lock(&core_data->irq_state_lock);
 	core_data->power_transition = true;
 	atomic_set(&core_data->suspended, 1);
@@ -1865,6 +2032,12 @@ out:
 	mutex_lock(&core_data->irq_state_lock);
 	core_data->power_transition = false;
 	core_data->fps_irq_disabled = false;
+#if defined(CONFIG_DRM)
+	if (atomic_read(&core_data->panel_blank_complete))
+		atomic_set(&core_data->gesture_reporting_allowed, 1);
+#else
+	atomic_set(&core_data->gesture_reporting_allowed, 1);
+#endif
 	mutex_unlock(&core_data->irq_state_lock);
 	ts_info("Suspend end");
 	return 0;
@@ -1892,6 +2065,8 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
 		return 0;
 
 	ts_info("Resume start");
+	atomic_set(&core_data->gesture_reporting_allowed, 0);
+	atomic_set(&core_data->panel_blank_complete, 0);
 	mutex_lock(&core_data->irq_state_lock);
 	core_data->power_transition = true;
 	atomic_set(&core_data->suspended, 0);
@@ -2009,6 +2184,13 @@ static void goodix_set_gesture_work(struct work_struct *work)
 	} else {
 		ts_err("enter gesture mode");
 	}
+
+	if (hw_ops->after_event_handler) {
+		res = hw_ops->after_event_handler(core_data);
+		if (res)
+			ts_info("warning: failed to clear pending event in gesture work: %d",
+				res);
+	}
 	hw_ops->irq_enable(core_data, true);
 
 exit:
@@ -2096,6 +2278,9 @@ static void goodix_panel_notifier_callback(enum panel_event_notifier_tag tag,
 	switch (notification->notif_type) {
 	case DRM_PANEL_EVENT_UNBLANK:
 		if (notification->notif_data.early_trigger) {
+			atomic_set(&core_data->panel_blank_complete, 0);
+			atomic_set(&core_data->gesture_reporting_allowed, 0);
+			notify_oneshot_sensor(ONESHOT_SENSOR_FOD_PRESS, 0);
 			flush_workqueue(core_data->power_wq);
 			queue_work(core_data->power_wq, &core_data->resume_work);
 		}
@@ -2104,8 +2289,23 @@ static void goodix_panel_notifier_callback(enum panel_event_notifier_tag tag,
 	case DRM_PANEL_EVENT_BLANK:
 	case DRM_PANEL_EVENT_BLANK_LP:
 		if (notification->notif_data.early_trigger) {
+			atomic_set(&core_data->panel_blank_complete, 0);
+			atomic_set(&core_data->gesture_reporting_allowed, 0);
 			flush_workqueue(core_data->power_wq);
 			queue_work(core_data->power_wq, &core_data->suspend_work);
+		} else {
+			/*
+			 * Gesture forwarding becomes legal only after both the panel
+			 * and the touch controller have completed their suspend path.
+			 * Either side may finish first, so publish the gate from both
+			 * completion points under the same transition state.
+			 */
+			atomic_set(&core_data->panel_blank_complete, 1);
+			mutex_lock(&core_data->irq_state_lock);
+			if (atomic_read(&core_data->suspended) &&
+					!core_data->power_transition)
+				atomic_set(&core_data->gesture_reporting_allowed, 1);
+			mutex_unlock(&core_data->irq_state_lock);
 		}
 		break;
 	case DRM_PANEL_EVENT_FPS_CHANGE:
@@ -2173,13 +2373,19 @@ int goodix_ts_fb_notifier_callback(struct notifier_block *self,
 	if (fb_event && fb_event->data && core_data) {
 		if (event == FB_EARLY_EVENT_BLANK) {
 			/* before fb blank */
+			atomic_set(&core_data->gesture_reporting_allowed, 0);
 		} else if (event == FB_EVENT_BLANK) {
 			int *blank = fb_event->data;
 
-			if (*blank == FB_BLANK_UNBLANK)
+			if (*blank == FB_BLANK_UNBLANK) {
+				atomic_set(&core_data->panel_blank_complete, 0);
+				atomic_set(&core_data->gesture_reporting_allowed, 0);
+				notify_oneshot_sensor(ONESHOT_SENSOR_FOD_PRESS, 0);
 				goodix_ts_resume(core_data);
-			else if (*blank == FB_BLANK_POWERDOWN)
+			} else if (*blank == FB_BLANK_POWERDOWN) {
+				atomic_set(&core_data->panel_blank_complete, 1);
 				goodix_ts_suspend(core_data);
+			}
 		}
 	}
 
@@ -2318,6 +2524,7 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 	inspect_module_init();
 
 	return 0;
+
 exit:
 	goodix_ts_pen_dev_remove(cd);
 err_finger:
@@ -2582,6 +2789,12 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	}
 
 	mutex_init(&core_data->irq_state_lock);
+	atomic_set(&core_data->gesture_reporting_allowed, 0);
+	atomic_set(&core_data->panel_blank_complete, 0);
+	atomic64_set(&core_data->touch_guard.invalid_frames, 0);
+	atomic64_set(&core_data->touch_guard.suppressed_contacts, 0);
+	atomic64_set(&core_data->touch_guard.confirmed_contacts, 0);
+	atomic64_set(&core_data->touch_guard.transition_gesture_drops, 0);
 
 	if (IS_ENABLED(CONFIG_OF) && bus_interface->dev->of_node) {
 		/* parse devicetree property */
