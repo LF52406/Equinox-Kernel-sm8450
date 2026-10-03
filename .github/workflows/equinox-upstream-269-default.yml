@@ -1,0 +1,83 @@
+name: Equinox upstream 5.10.269 merge worker
+
+on:
+  push:
+    branches:
+      - lineage-24.0
+
+permissions:
+  contents: write
+
+jobs:
+  merge-upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout protected staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: equinox-5.10.269-staging
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify Equinox 5.10.260 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_HEAD="149fa3416c693f2ccfb22ad19c433375a72e78f7"
+          QCOM_260="815e317bce6a2e4229ca99aeb905fa9a9e622964"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git cat-file -e "${QCOM_260}^{commit}"
+          git merge-base --is-ancestor "$QCOM_260" HEAD
+          test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -n1)" = "260"
+          echo "Baseline verified: $(git rev-parse --short=12 HEAD), Linux 5.10.260"
+
+      - name: Fetch LineageOS Qualcomm 5.10.269 upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          QCOM_269="d5558ead101620fe5ace306a6ef5f5daa137d257"
+          QCOM_260="815e317bce6a2e4229ca99aeb905fa9a9e622964"
+          git remote add qcom-upstream https://github.com/LineageOS/android_kernel_qcom_sm8450.git
+          git fetch --no-tags qcom-upstream "$QCOM_269"
+          git cat-file -e "${QCOM_269}^{commit}"
+          MERGE_BASE="$(git merge-base HEAD "$QCOM_269")"
+          echo "Detected merge base: $MERGE_BASE"
+          test "$MERGE_BASE" = "$QCOM_260"
+
+      - name: Merge 5.10.269 and audit conflicts
+        shell: bash
+        run: |
+          set -euo pipefail
+          QCOM_269="d5558ead101620fe5ace306a6ef5f5daa137d257"
+          git config user.name "LF52406 Equinox Upstream Bot"
+          git config user.email "LF52406@users.noreply.github.com"
+          set +e
+          git merge --no-ff --no-commit "$QCOM_269"
+          MERGE_RC=$?
+          set -e
+          if [ "$MERGE_RC" -ne 0 ]; then
+            echo "::error::Upstream merge has conflicts. Nothing will be pushed."
+            echo "===== UNMERGED FILES ====="
+            git diff --name-only --diff-filter=U
+            echo "===== CONFLICT SUMMARY ====="
+            git status --short
+            echo "===== COMBINED CONFLICT DIFF ====="
+            git diff --cc --no-ext-diff | sed -n '1,3000p'
+            git merge --abort || true
+            exit 2
+          fi
+          echo "===== MERGE SUMMARY ====="
+          git status --short
+          echo "Changed files: $(git diff --cached --name-only | wc -l)"
+          test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -n1)" = "269"
+          git diff --cached --check
+
+      - name: Commit verified upstream merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -m "Merge LineageOS kernel upstream through 5.10.269" \
+            -m "Merge LineageOS/android_kernel_qcom_sm8450 android13-5.10-waipio at d5558ead101620fe5ace306a6ef5f5daa137d257 while preserving the existing Xiaomi/Equinox tree."
+          git push origin HEAD:equinox-5.10.269-staging
