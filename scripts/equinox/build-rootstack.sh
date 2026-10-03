@@ -33,7 +33,7 @@ case "$PROFILE" in
         ;;
 esac
 
-for cmd in git curl sha256sum tar zstd python3 make patch realpath; do
+for cmd in git curl sha256sum tar zstd python3 perl make patch realpath; do
     command -v "$cmd" >/dev/null || { echo "[!] missing host tool: $cmd"; exit 1; }
 done
 
@@ -56,6 +56,7 @@ echo "    profile : $PROFILE"
 echo "    jobs    : $JOBS"
 echo "    out     : $OUT"
 echo "    baseline: $BASELINE_SYMVERS"
+echo "    python  : $(python3 --version 2>&1)"
 
 # -----------------------------------------------------------------------------
 # Pinned Neutron Clang
@@ -150,7 +151,7 @@ git -C "$KSUN" diff --check
 rm -rf "$OUT"
 mkdir -p "$OUT" "$DIST"
 
-make -s O="$OUT" LOCALVERSION= gki_defconfig
+make -s O="$OUT" LOCALVERSION= PYTHON=python3 gki_defconfig
 
 scripts/kconfig/merge_config.sh -m -O "$OUT" \
     "$OUT/.config" \
@@ -161,7 +162,7 @@ scripts/kconfig/merge_config.sh -m -O "$OUT" \
     scripts/equinox/configs/rootstack.config \
     "$DROID_CFG"
 
-make -s -j"$JOBS" O="$OUT" LOCALVERSION= olddefconfig
+make -s -j"$JOBS" O="$OUT" LOCALVERSION= PYTHON=python3 olddefconfig
 CFG="$OUT/.config"
 
 python3 - "$CFG" scripts/equinox/configs/rootstack.config "$DROID_CFG" <<'PY'
@@ -226,10 +227,10 @@ grep -q '_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8)'
 # Regenerate auto.conf/kernel.release after all fragment merges. This avoids a
 # stale generated release string when the integration worktree is dirty.
 rm -f "$OUT/include/config/auto.conf" "$OUT/include/config/auto.conf.cmd"
-make -s O="$OUT" LOCALVERSION= olddefconfig
-make -s O="$OUT" LOCALVERSION= prepare
+make -s O="$OUT" LOCALVERSION= PYTHON=python3 olddefconfig
+make -s O="$OUT" LOCALVERSION= PYTHON=python3 prepare
 
-release="$(make -s O="$OUT" LOCALVERSION= kernelrelease)"
+release="$(make -s O="$OUT" LOCALVERSION= PYTHON=python3 kernelrelease)"
 [ "$release" = "$EXPECTED_KERNEL_RELEASE" ] || { echo "[!] unexpected kernel release: $release"; exit 1; }
 echo "[*] kernel release: $release"
 
@@ -238,7 +239,7 @@ echo "[*] kernel release: $release"
 # -----------------------------------------------------------------------------
 echo "[*] building production Image with Neutron Clang"
 set -o pipefail
-make -j"$JOBS" O="$OUT" LOCALVERSION= Image modules 2>&1 | tee "$DIST/build-$PROFILE.log"
+make -j"$JOBS" O="$OUT" LOCALVERSION= PYTHON=python3 Image modules 2>&1 | tee "$DIST/build-$PROFILE.log"
 
 IMAGE="$OUT/arch/arm64/boot/Image"
 [ -s "$IMAGE" ] || { echo '[!] Image was not produced'; exit 1; }
