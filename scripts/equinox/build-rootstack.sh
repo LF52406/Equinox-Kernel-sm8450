@@ -6,39 +6,59 @@ cd "$ROOT"
 
 source scripts/equinox/pins.env
 
-PROFILE="${DROIDSPACES_PROFILE:-full}"
-OUT="${OUT:-$HOME/out/equinox-rootstack}"
-DIST="${DIST:-$HOME/dist/equinox-rootstack}"
+PROFILE="${DROIDSPACES_PROFILE:-kmi-safe}"
+OUT="${OUT:-$HOME/out/equinox-production}"
+DIST="${DIST:-$HOME/dist/equinox-production}"
 DEPS="${EQUINOX_DEPS:-$HOME/equinox-deps}"
 TC="${NEUTRON_DIR:-$HOME/toolchains/neutron-$NEUTRON_BUILD}"
-BASELINE_SYMVERS="${BASELINE_SYMVERS:-$HOME/out/equinox/Module.symvers}"
+BASELINE_SYMVERS="${BASELINE_SYMVERS:?BASELINE_SYMVERS is required for the production KMI gate}"
 JOBS="${JOBS:-$(nproc --all)}"
 [ "$JOBS" -le 16 ] || JOBS=16
 
 case "$PROFILE" in
-    full) DROID_CFG="scripts/equinox/configs/droidspaces-full.config" ;;
-    kmi-safe) DROID_CFG="scripts/equinox/configs/droidspaces-kmi-safe.config" ;;
-    *) echo "[!] DROIDSPACES_PROFILE must be full or kmi-safe"; exit 2 ;;
+    kmi-safe)
+        DROID_CFG="scripts/equinox/configs/droidspaces-kmi-safe.config"
+        ;;
+    full)
+        [ "${ALLOW_EXPERIMENTAL_FULL_DROIDSPACES:-0}" = 1 ] || {
+            echo '[!] full DroidSpaces is intentionally blocked for Image-only production builds.'
+            echo '[!] use kmi-safe, or set ALLOW_EXPERIMENTAL_FULL_DROIDSPACES=1 only for ABI research.'
+            exit 2
+        }
+        DROID_CFG="scripts/equinox/configs/droidspaces-full.config"
+        ;;
+    *)
+        echo "[!] DROIDSPACES_PROFILE must be kmi-safe or full"
+        exit 2
+        ;;
 esac
 
-for c in git curl sha256sum tar zstd python3 make patch realpath; do
-    command -v "$c" >/dev/null || { echo "[!] missing host tool: $c"; exit 1; }
+for cmd in git curl sha256sum tar zstd python3 make patch realpath; do
+    command -v "$cmd" >/dev/null || { echo "[!] missing host tool: $cmd"; exit 1; }
 done
 
+[ -s "$BASELINE_SYMVERS" ] || {
+    echo "[!] baseline Module.symvers missing: $BASELINE_SYMVERS"
+    echo '[!] production Image will not be built without a KMI baseline'
+    exit 1
+}
+
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-    echo "[!] tracked kernel tree is dirty. Use a fresh checkout/worktree for this build."
+    echo "[!] tracked kernel tree is dirty before integration"
+    echo "[!] run this script in the detached worktree created by build-production.sh"
     exit 1
 fi
 
-mkdir -p "$HOME/toolchains" "$DEPS" "$OUT" "$DIST"
+mkdir -p "$HOME/toolchains" "$DEPS" "$DIST"
 
-echo "[*] Equinox root stack"
+echo "[*] Equinox production root stack"
 echo "    profile : $PROFILE"
 echo "    jobs    : $JOBS"
 echo "    out     : $OUT"
+echo "    baseline: $BASELINE_SYMVERS"
 
 # -----------------------------------------------------------------------------
-# Neutron Clang, pinned and checksummed
+# Pinned Neutron Clang
 # -----------------------------------------------------------------------------
 if [ ! -x "$TC/bin/clang" ]; then
     echo "[*] fetching Neutron Clang $NEUTRON_BUILD"
@@ -47,6 +67,7 @@ if [ ! -x "$TC/bin/clang" ]; then
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
     archive="$tmp/neutron-clang-$NEUTRON_BUILD.tar.zst"
+
     curl -fL --retry 4 --retry-delay 5 \
         "https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/$NEUTRON_BUILD/neutron-clang-$NEUTRON_BUILD.tar.zst" \
         -o "$archive"
@@ -58,7 +79,17 @@ if [ ! -x "$TC/bin/clang" ]; then
         -o "$TC/antman"
     echo "$ANTMAN_SHA256  $TC/antman" | sha256sum -c -
     chmod +x "$TC/antman"
-    (cd "$TC" && ./antman --patch=glibc)
+
+    patched=0
+    for attempt in 1 2 3 4; do
+        if (cd "$TC" && ./antman --patch=glibc); then
+            patched=1
+            break
+        fi
+        [ "$attempt" -eq 4 ] && break
+        sleep $((attempt * 20))
+    done
+    [ "$patched" -eq 1 ] || { echo '[!] antman glibc patch failed'; exit 1; }
 fi
 
 export PATH="$TC/bin:$PATH"
@@ -69,12 +100,12 @@ export LLVM_IAS=1
 export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-LF52406}"
 export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-Equinox}"
 
-clang_line="$(clang --version | head -n1)"
+clang_line="$(clang --version | sed -n '1p')"
 echo "[*] toolchain: $clang_line"
-echo "$clang_line" | grep -qi 'Neutron clang' || { echo "[!] selected compiler is not Neutron Clang"; exit 1; }
+echo "$clang_line" | grep -qi 'Neutron clang' || { echo '[!] selected compiler is not Neutron Clang'; exit 1; }
 
 # -----------------------------------------------------------------------------
-# Exact third-party source pins
+# Exact KernelSU-Next and SUSFS pins
 # -----------------------------------------------------------------------------
 KSUN="$DEPS/KernelSU-Next-$KSUN_TAG"
 SUSFS="$DEPS/susfs4ksu-$SUSFS_PIN"
@@ -85,8 +116,11 @@ if [ ! -d "$KSUN/.git" ]; then
 fi
 git -C "$KSUN" fetch --tags origin
 git -C "$KSUN" checkout --detach "$KSUN_PIN"
+git -C "$KSUN" reset --hard "$KSUN_PIN"
+git -C "$KSUN" clean -ffdx
 [ "$(git -C "$KSUN" rev-parse HEAD)" = "$KSUN_PIN" ] || { echo '[!] KernelSU pin mismatch'; exit 1; }
-git -C "$KSUN" describe --tags --exact-match HEAD | grep -qx "$KSUN_TAG" || { echo '[!] KernelSU tag mismatch'; exit 1; }
+[ "$(git -C "$KSUN" rev-parse --is-shallow-repository)" = false ] || { echo '[!] KernelSU checkout is shallow'; exit 1; }
+[ "$(git -C "$KSUN" describe --tags --exact-match HEAD)" = "$KSUN_TAG" ] || { echo '[!] KernelSU tag mismatch'; exit 1; }
 
 if [ ! -d "$SUSFS/.git" ]; then
     rm -rf "$SUSFS"
@@ -94,6 +128,8 @@ if [ ! -d "$SUSFS/.git" ]; then
 fi
 git -C "$SUSFS" fetch origin "$SUSFS_BRANCH"
 git -C "$SUSFS" checkout --detach "$SUSFS_PIN"
+git -C "$SUSFS" reset --hard "$SUSFS_PIN"
+git -C "$SUSFS" clean -ffdx
 [ "$(git -C "$SUSFS" rev-parse HEAD)" = "$SUSFS_PIN" ] || { echo '[!] SUSFS pin mismatch'; exit 1; }
 grep -q '#define SUSFS_VERSION "v2.3.0"' "$SUSFS/kernel_patches/include/linux/susfs.h" || { echo '[!] SUSFS v2.3.0 check failed'; exit 1; }
 
@@ -101,10 +137,12 @@ echo "[*] KernelSU-Next: $KSUN_TAG @ ${KSUN_PIN:0:12}"
 echo "[*] SUSFS: $SUSFS_EXPECT_VERSION @ ${SUSFS_PIN:0:12}"
 
 # -----------------------------------------------------------------------------
-# Source integration. Strict: no fuzzy fallback, no module CRC bypass.
+# Source integration
 # -----------------------------------------------------------------------------
 bash scripts/equinox/integrate-ksun-susfs.sh "$KSUN" "$SUSFS" "$ROOT"
 bash scripts/equinox/integrate-droidspaces.sh "$ROOT"
+git diff --check
+git -C "$KSUN" diff --check
 
 # -----------------------------------------------------------------------------
 # Kernel configuration
@@ -128,49 +166,77 @@ CFG="$OUT/.config"
 
 python3 - "$CFG" scripts/equinox/configs/rootstack.config "$DROID_CFG" <<'PY'
 import sys
+
 cfg = {}
-for line in open(sys.argv[1], encoding='utf-8'):
-    line=line.strip()
+for raw in open(sys.argv[1], encoding='utf-8'):
+    line = raw.strip()
     if line.startswith('CONFIG_') and '=' in line:
-        k,v=line.split('=',1); cfg[k]=v
+        key, value = line.split('=', 1)
+        cfg[key] = value
     elif line.startswith('# CONFIG_') and line.endswith(' is not set'):
-        cfg[line[2:-11]]='n'
-errors=[]
-for frag in sys.argv[2:]:
-    for raw in open(frag, encoding='utf-8'):
-        line=raw.strip()
+        cfg[line[2:-11]] = 'n'
+
+errors = []
+for fragment in sys.argv[2:]:
+    for raw in open(fragment, encoding='utf-8'):
+        line = raw.strip()
         if not line or (line.startswith('#') and not line.startswith('# CONFIG_')):
             continue
         if line.startswith('CONFIG_') and '=' in line:
-            k,v=line.split('=',1)
-            if cfg.get(k) != v:
-                errors.append(f'{k}: requested {v}, final {cfg.get(k, "<missing>")}')
+            key, value = line.split('=', 1)
+            if cfg.get(key) != value:
+                errors.append(f'{key}: requested {value}, final {cfg.get(key, "<missing>")}')
         elif line.startswith('# CONFIG_') and line.endswith(' is not set'):
-            k=line[2:-11]
-            # Missing optional legacy symbols are equivalent to disabled.
-            if cfg.get(k, 'n') != 'n':
-                errors.append(f'{k}: requested n, final {cfg.get(k)}')
+            key = line[2:-11]
+            if cfg.get(key, 'n') != 'n':
+                errors.append(f'{key}: requested n, final {cfg.get(key)}')
+
 if errors:
-    print('[!] final Kconfig does not satisfy requested root stack:')
-    for e in errors: print('    ' + e)
+    print('[!] final Kconfig does not satisfy requested production profile:')
+    for error in errors:
+        print('    ' + error)
     raise SystemExit(1)
-print('[+] final Kconfig matches requested root stack/profile')
+
+print('[+] final Kconfig matches root stack and DroidSpaces profile')
 PY
 
-# Protect the security/integrity settings of the known-good Equinox base.
+# Base integrity and branding.
 grep -q '^CONFIG_LTO_CLANG_FULL=y' "$CFG" || { echo '[!] Full LTO dropped'; exit 1; }
 grep -q '^CONFIG_CFI_CLANG=y' "$CFG" || { echo '[!] Clang CFI dropped'; exit 1; }
 grep -q '^CONFIG_MODVERSIONS=y' "$CFG" || { echo '[!] MODVERSIONS dropped'; exit 1; }
 grep -q '^CONFIG_LOCALVERSION="-Equinox"' "$CFG" || { echo '[!] Equinox branding dropped'; exit 1; }
+grep -q '^CONFIG_KSU=y' "$CFG" || { echo '[!] KernelSU-Next is not enabled'; exit 1; }
+grep -q '^CONFIG_KSU_SUSFS=y' "$CFG" || { echo '[!] SUSFS is not enabled'; exit 1; }
+grep -q '^CONFIG_SYSVIPC=y' "$CFG" || { echo '[!] DroidSpaces SYSVIPC support missing'; exit 1; }
+
+if [ "$PROFILE" = kmi-safe ]; then
+    for option in CGROUP_DEVICE CGROUP_PIDS BRIDGE_NETFILTER NF_TABLES; do
+        if grep -q "^CONFIG_${option}=y" "$CFG"; then
+            echo "[!] unsafe production option enabled: CONFIG_${option}=y"
+            exit 1
+        fi
+    done
+fi
+
+# DroidSpaces SYSVIPC must live in Android KABI reserves, never in its original
+# task_struct position.
+grep -q 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem)' include/linux/sched.h || { echo '[!] SYSVIPC KABI relocation missing'; exit 1; }
+grep -q '_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8)' include/linux/sched.h || { echo '[!] SYSVIPC shm KABI relocation missing'; exit 1; }
+
+# Regenerate auto.conf/kernel.release after all fragment merges. This avoids a
+# stale generated release string when the integration worktree is dirty.
+rm -f "$OUT/include/config/auto.conf" "$OUT/include/config/auto.conf.cmd"
+make -s O="$OUT" LOCALVERSION= olddefconfig
+make -s O="$OUT" LOCALVERSION= prepare
 
 release="$(make -s O="$OUT" LOCALVERSION= kernelrelease)"
-[ "$release" = "5.10.269-Equinox" ] || { echo "[!] unexpected kernel release: $release"; exit 1; }
+[ "$release" = "$EXPECTED_KERNEL_RELEASE" ] || { echo "[!] unexpected kernel release: $release"; exit 1; }
 echo "[*] kernel release: $release"
 
 # -----------------------------------------------------------------------------
-# Build Image + in-tree modules. Module.symvers is required for the KMI gate.
+# Build Image and modules
 # -----------------------------------------------------------------------------
-echo "[*] building with Neutron Clang"
+echo "[*] building production Image with Neutron Clang"
 set -o pipefail
 make -j"$JOBS" O="$OUT" LOCALVERSION= Image modules 2>&1 | tee "$DIST/build-$PROFILE.log"
 
@@ -184,47 +250,20 @@ cp "$OUT/Module.symvers" "$DIST/Module.symvers-$PROFILE"
 sha256sum "$DIST/Image-$PROFILE" | tee "$DIST/Image-$PROFILE.sha256"
 
 # -----------------------------------------------------------------------------
-# KMI comparison against the already boot-tested Equinox base.
-# Added exports are reported but do not break existing modules. Changed/removed
-# CRCs are the important signal for prebuilt vendor modules.
+# Mandatory KMI gate
 # -----------------------------------------------------------------------------
-if [ -f "$BASELINE_SYMVERS" ]; then
-    python3 - "$BASELINE_SYMVERS" "$OUT/Module.symvers" "$DIST/kmi-$PROFILE.txt" <<'PY'
-import sys
-oldf,newf,outf=sys.argv[1:]
-def load(p):
-    d={}
-    with open(p, errors='replace') as f:
-        for ln in f:
-            x=ln.split()
-            if len(x)>=2: d[x[1]]=x[0]
-    return d
-old,new=load(oldf),load(newf)
-changed=sorted((k,old[k],new[k]) for k in old.keys() & new.keys() if old[k] != new[k])
-removed=sorted(k for k in old.keys()-new.keys())
-added=sorted(k for k in new.keys()-old.keys())
-with open(outf,'w') as o:
-    o.write(f'changed_crc={len(changed)}\nremoved={len(removed)}\nadded={len(added)}\n\n')
-    for k,a,b in changed: o.write(f'CHANGED {k} {a} -> {b}\n')
-    for k in removed: o.write(f'REMOVED {k}\n')
-    for k in added: o.write(f'ADDED {k}\n')
-print(f'[KMI] changed CRC: {len(changed)}, removed: {len(removed)}, added: {len(added)}')
-if changed or removed:
-    print('[KMI] existing vendor modules must NOT be assumed compatible with this Image')
-else:
-    print('[KMI] no existing exported symbol CRC was changed or removed')
-PY
-else
-    echo "[!] baseline Module.symvers not found: $BASELINE_SYMVERS"
-    echo "[!] build is valid, but module compatibility has not been checked"
+KMI_REPORT="$DIST/kmi-$PROFILE.txt"
+bash scripts/equinox/symvers-diff.sh "$BASELINE_SYMVERS" "$OUT/Module.symvers" "$KMI_REPORT"
+
+# Source/compile sanity after the build.
+if grep -Eqi '(^|[[:space:]])(error:|fatal error:|undefined reference|ld\.lld: error|make: \*\*\*)' "$DIST/build-$PROFILE.log"; then
+    echo '[!] compiler/linker error signature found in build log'
+    exit 1
 fi
 
-echo "[+] build complete"
+git diff --check
+
+echo "[+] production kernel build passed"
 echo "    Image : $DIST/Image-$PROFILE"
 echo "    config: $DIST/config-$PROFILE"
-echo "    KMI   : $DIST/kmi-$PROFILE.txt"
-
-if [ "$PROFILE" = full ]; then
-    echo "[i] Full DroidSpaces profile is intentionally NOT packaged as an Image-only AnyKernel ZIP here."
-    echo "[i] Review KMI first, then rebuild/package the vendor module stack if CRCs moved."
-fi
+echo "    KMI   : $KMI_REPORT"

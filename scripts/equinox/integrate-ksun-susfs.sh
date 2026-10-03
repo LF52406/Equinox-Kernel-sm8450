@@ -8,42 +8,74 @@ KROOT="${3:-$PWD}"
 P10="$SUSFS_DIR/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
 P50="$SUSFS_DIR/kernel_patches/50_add_susfs_in_gki-android13-5.10.patch"
 
-for f in "$P10" "$P50" "$KSUN_DIR/kernel/Kconfig" "$KROOT/drivers/Kconfig"; do
+for f in "$P10" "$P50" "$KSUN_DIR/kernel/Kconfig" "$KROOT/drivers/Kconfig" "$KROOT/drivers/Makefile"; do
     [ -f "$f" ] || { echo "[!] missing $f"; exit 1; }
 done
 
 echo "[*] KernelSU-Next + SUSFS: wiring driver"
 
-# Wire KernelSU-Next into the kernel tree exactly once.
+# Wire the pinned KernelSU-Next driver into this build worktree.
 ln -sfn "$(realpath --relative-to="$KROOT/drivers" "$KSUN_DIR/kernel")" "$KROOT/drivers/kernelsu"
 grep -q 'source "drivers/kernelsu/Kconfig"' "$KROOT/drivers/Kconfig" || \
     sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' "$KROOT/drivers/Kconfig"
 grep -q 'obj-$(CONFIG_KSU) += kernelsu/' "$KROOT/drivers/Makefile" || \
     printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> "$KROOT/drivers/Makefile"
 
-# Add only the SUSFS Kconfig menu from upstream. Do not apply the complete 10_ patch:
-# it rewrites unrelated KernelSU-Next hook infrastructure and is not a safe v3.3.0 patch.
+# Import only the SUSFS Kconfig menu. The complete generic KernelSU patch is not
+# applied because it contains hook code for a different KernelSU integration.
 python3 - "$P10" "$KSUN_DIR/kernel/Kconfig" <<'PY'
-import re, sys
-patch, dst = sys.argv[1], sys.argv[2]
-s = open(patch, encoding='utf-8', errors='replace').read()
-d = open(dst, encoding='utf-8').read()
-if 'config KSU_SUSFS' in d:
+import re
+import sys
+
+patch, dst = sys.argv[1:]
+src = open(patch, encoding='utf-8', errors='replace').read()
+code = open(dst, encoding='utf-8').read()
+
+if 'config KSU_SUSFS' in code:
     print('[=] KernelSU SUSFS Kconfig already present')
     raise SystemExit(0)
-m = re.search(r'diff --git a/kernel/Kconfig.*?(?=\ndiff --git |\Z)', s, re.S)
+
+m = re.search(r'diff --git a/kernel/Kconfig.*?(?=\ndiff --git |\Z)', src, re.S)
 if not m:
     raise SystemExit('[!] cannot find KernelSU Kconfig hunk in SUSFS patch')
-added = [x[1:] for x in m.group(0).splitlines() if x.startswith('+') and not x.startswith('+++')]
+
+added = [
+    line[1:]
+    for line in m.group(0).splitlines()
+    if line.startswith('+') and not line.startswith('+++')
+]
 menu = '\n'.join(added).strip()
 if 'config KSU_SUSFS' not in menu or 'config KSU_SUSFS_SUS_MAP' not in menu:
     raise SystemExit('[!] extracted SUSFS Kconfig menu is incomplete')
+
+# SUSFS 2.3.0's patch contains help-text bullet lines in a few stanzas without
+# an explicit `help` token. Kconfig treats the first '-' as syntax. Repair this
+# deterministically while keeping the actual menu text unchanged.
+fixed = []
+in_config = False
+seen_help = False
+for line in menu.splitlines():
+    stripped = line.strip()
+    if stripped.startswith('config '):
+        in_config = True
+        seen_help = False
+    elif stripped.startswith('menu') or stripped == 'endmenu':
+        in_config = False
+        seen_help = False
+    elif stripped == 'help':
+        seen_help = True
+    elif in_config and stripped.startswith('- ') and not seen_help:
+        fixed.append('\thelp')
+        seen_help = True
+    fixed.append(line)
+menu = '\n'.join(fixed)
+
 open(dst, 'a', encoding='utf-8').write('\n\n' + menu + '\n')
-print('[+] appended upstream SUSFS Kconfig menu')
+print('[+] appended validated SUSFS Kconfig menu')
 PY
 
-# Add the complete SID helper surface expected by SUSFS while keeping KSUN's own
-# SELinux implementation intact.
+# Add the SID helper surface expected by SUSFS while preserving KernelSU-Next's
+# own SELinux implementation.
 python3 - "$KSUN_DIR/kernel/selinux/selinux.c" "$KSUN_DIR/kernel/selinux/selinux.h" "$KSUN_DIR/kernel/selinux/rules.c" <<'PY'
 import sys
 cfile, hfile, rfile = sys.argv[1:]
@@ -125,8 +157,7 @@ void susfs_set_batch_sid(void)
     c = c.rstrip() + '\n' + glue
 
 if 'void susfs_set_batch_sid(void);' not in h:
-    anchor = '#endif'
-    pos = h.rfind(anchor)
+    pos = h.rfind('#endif')
     if pos < 0:
         raise SystemExit('[!] selinux.h end guard not found')
     proto = r'''
@@ -161,9 +192,11 @@ open(rfile, 'w', encoding='utf-8').write(r)
 print('[+] SUSFS SELinux SID helpers integrated')
 PY
 
-# SUSFS command transport uses the same reboot kprobe/supercall path already used by KSUN.
+# Graft SUSFS command dispatch into the reboot supercall path already owned by
+# KernelSU-Next. Do not add a second reboot hook.
 python3 - "$P10" "$KSUN_DIR/kernel/supercall/supercall.c" <<'PY'
-import re, sys
+import re
+import sys
 patch, path = sys.argv[1:]
 p = open(patch, encoding='utf-8', errors='replace').read()
 s = open(path, encoding='utf-8').read()
@@ -174,19 +207,35 @@ if 'CMD_SUSFS_ADD_SUS_PATH' in s:
 m = re.search(r'diff --git a/kernel/supercall/dispatch\.c.*?(?=\ndiff --git |\Z)', p, re.S)
 if not m:
     raise SystemExit('[!] SUSFS dispatch hunk not found')
-added = '\n'.join(x[1:] for x in m.group(0).splitlines() if x.startswith('+') and not x.startswith('+++'))
+added = '\n'.join(
+    line[1:] for line in m.group(0).splitlines()
+    if line.startswith('+') and not line.startswith('+++')
+)
 sm = re.search(r'switch\(cmd\)\s*\{\s*(.*?)\n\s*\}\s*\n\s*\}', added, re.S)
 if not sm:
     raise SystemExit('[!] cannot extract SUSFS command switch')
 switch_body = sm.group(1)
 if 'CMD_SUSFS_ADD_SUS_PATH' not in switch_body or 'CMD_SUSFS_SHOW_VERSION' not in switch_body:
     raise SystemExit('[!] SUSFS command switch failed validation')
-switch_body = re.sub(r'default:\s*\n\s*return -EINVAL;', 'default:\n                return 0;', switch_body)
+switch_body = re.sub(
+    r'default:\s*\n\s*return -EINVAL;',
+    'default:\n                return 0;',
+    switch_body,
+)
 
 include_anchor = '#include <linux/utsname.h> // utsname() and uts_sem\n'
 if include_anchor not in s:
     raise SystemExit('[!] KernelSU supercall include anchor changed')
-s = s.replace(include_anchor, include_anchor + '#ifdef CONFIG_KSU_SUSFS\n#include <linux/cred.h>\n#include <linux/sched.h>\n#include <linux/susfs.h>\n#endif\n', 1)
+s = s.replace(
+    include_anchor,
+    include_anchor +
+    '#ifdef CONFIG_KSU_SUSFS\n'
+    '#include <linux/cred.h>\n'
+    '#include <linux/sched.h>\n'
+    '#include <linux/susfs.h>\n'
+    '#endif\n',
+    1,
+)
 
 arg_anchor = '    unsigned long reply = (unsigned long)arg4;\n'
 if arg_anchor not in s:
@@ -204,10 +253,10 @@ dispatch = '''
 ''' % switch_body
 s = s.replace(arg_anchor, arg_anchor + dispatch, 1)
 open(path, 'w', encoding='utf-8').write(s)
-print('[+] SUSFS command dispatch integrated into KSUN reboot kprobe')
+print('[+] SUSFS command dispatch integrated into KSUN reboot supercall')
 PY
 
-# Initialize SUSFS before KernelSU starts accepting supercalls.
+# Initialize SUSFS before KernelSU begins accepting supercalls.
 python3 - "$KSUN_DIR/kernel/core/init.c" <<'PY'
 import sys
 path = sys.argv[1]
@@ -218,14 +267,17 @@ if 'susfs_init();' in s:
 anchor = '\tksu_supercalls_init();'
 if anchor not in s:
     raise SystemExit('[!] KernelSU init anchor changed')
-s = s.replace(anchor, '#ifdef CONFIG_KSU_SUSFS\n\t{ extern void susfs_init(void); susfs_init(); }\n#endif\n' + anchor, 1)
+s = s.replace(
+    anchor,
+    '#ifdef CONFIG_KSU_SUSFS\n\t{ extern void susfs_init(void); susfs_init(); }\n#endif\n' + anchor,
+    1,
+)
 open(path, 'w', encoding='utf-8').write(s)
 print('[+] SUSFS init wired into kernelsu_init')
 PY
 
-# Preserve KSUN v3.3.0 setuid/manager/seccomp logic and add only SUSFS process
-# marking around its existing kernel-umount point. This avoids the incompatible
-# three-argument setresuid rewrite carried by the generic SUSFS KernelSU patch.
+# Keep KernelSU-Next v3.3.0's manager/setuid logic and only add the SUSFS
+# process state around the existing kernel-umount transition.
 python3 - "$KSUN_DIR/kernel/hook/setuid_hook.c" <<'PY'
 import sys
 path = sys.argv[1]
@@ -237,7 +289,16 @@ if 'Equinox SUSFS process state' in s:
 inc = '#include "feature/kernel_umount.h"\n'
 if inc not in s:
     raise SystemExit('[!] KernelSU setuid include anchor changed')
-s = s.replace(inc, inc + '#ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#include "selinux/selinux.h"\nextern struct work_struct susfs_extra_works;\n#endif\n', 1)
+s = s.replace(
+    inc,
+    inc +
+    '#ifdef CONFIG_KSU_SUSFS\n'
+    '#include <linux/susfs_def.h>\n'
+    '#include "selinux/selinux.h"\n'
+    'extern struct work_struct susfs_extra_works;\n'
+    '#endif\n',
+    1,
+)
 
 old = '    // Handle kernel umount\n    ksu_handle_umount(old_uid, new_uid);\n\n    return 0;\n'
 if old not in s:
@@ -275,7 +336,7 @@ new = r'''#ifdef CONFIG_KSU_SUSFS
 '''
 s = s.replace(old, new, 1)
 open(path, 'w', encoding='utf-8').write(s)
-print('[+] SUSFS zygote process marking integrated without replacing KSUN setuid hook')
+print('[+] SUSFS zygote process state integrated without replacing KSUN setuid hook')
 PY
 
 echo "[*] KernelSU-Next + SUSFS: applying Linux 5.10 VFS side"
@@ -283,10 +344,13 @@ echo "[*] KernelSU-Next + SUSFS: applying Linux 5.10 VFS side"
 cp "$SUSFS_DIR"/kernel_patches/fs/*.c "$KROOT/fs/"
 cp "$SUSFS_DIR"/kernel_patches/include/linux/*.h "$KROOT/include/linux/"
 
-# Sanitize the generic 50_ patch. KernelSU-Next already owns its root hooks.
-# Keep SUSFS VFS concealment/spoofing hooks, remove only the old manual-KSU hooks.
+# The generic Linux 5.10 SUSFS patch contains old manual KernelSU hook code.
+# Drop those pieces while keeping the real SUSFS VFS hooks. Some upstream hunks
+# mix legacy declarations with SUSFS declarations, so required SUSFS declarations
+# are restored explicitly after patching below.
 python3 - "$P50" "$KROOT/.equinox-susfs50.patch" <<'PY'
-import re, sys
+import re
+import sys
 src = open(sys.argv[1], encoding='utf-8', errors='replace').read()
 
 DROP_FILES = {
@@ -298,8 +362,18 @@ DROP_FILES = {
     'security/selinux/selinuxfs.c',
 }
 DROP_HUNK_MARKERS = {
-    'fs/open.c': ('ksu_handle_faccessat', 'ksu_su_compat_enabled'),
-    'fs/stat.c': ('ksu_handle_stat', 'ksu_handle_vfs_fstat', 'ksu_is_init_rc_hook_enabled', 'ksu_su_compat_enabled'),
+    'fs/open.c': (
+        'ksu_handle_faccessat',
+        'ksu_su_compat_enabled',
+        'struct filename *fname = NULL',
+    ),
+    'fs/stat.c': (
+        'ksu_handle_stat',
+        'ksu_handle_vfs_fstat',
+        'ksu_is_init_rc_hook_enabled',
+        'ksu_su_compat_enabled',
+        'struct filename *fname = NULL',
+    ),
     'kernel/sys.c': ('ksu_handle_setresuid',),
 }
 
@@ -320,47 +394,130 @@ for chunk in re.split(r'(?=^diff --git )', src, flags=re.M):
         parts = re.split(r'(?=^@@ )', chunk, flags=re.M)
         head, hunks = parts[0], parts[1:]
         kept = []
-        for h in hunks:
-            if any(x in h for x in markers):
-                print('[i] drop legacy KSU hunk:', path)
+        for hunk in hunks:
+            if any(marker in hunk for marker in markers):
+                print('[i] drop legacy/mixed KSU hunk:', path)
                 continue
-            kept.append(h)
+            kept.append(hunk)
         if not kept:
             continue
         chunk = head + ''.join(kept)
     out.append(chunk)
 
 final = ''.join(out)
-for forbidden in ('ksu_handle_setresuid', 'ksu_handle_faccessat', 'ksu_handle_execveat_sucompat',
-                  'ksu_selinux_hide_running', 'ksu_is_init_rc_hook_enabled'):
+for forbidden in (
+    'ksu_handle_setresuid',
+    'ksu_handle_faccessat',
+    'ksu_handle_execveat_sucompat',
+    'ksu_selinux_hide_running',
+    'ksu_is_init_rc_hook_enabled',
+):
     if forbidden in final:
         raise SystemExit('[!] legacy KernelSU hook survived patch sanitizer: ' + forbidden)
-for required in ('susfs_spoof_uname', 'susfs_is_inode_sus_kstat', 'susfs_sus_mount'):
+
+for required in (
+    'susfs_spoof_uname',
+    'susfs_is_inode_sus_kstat',
+    'susfs_is_current_proc_umounted',
+    'susfs_get_non_sus_mnt_id_from_mnt',
+    'susfs_show_mountinfo',
+):
     if required not in final:
-        raise SystemExit('[!] required SUSFS VFS hook missing after sanitizer: ' + required)
+        raise SystemExit('[!] required SUSFS 2.3.0 VFS hook missing after sanitizer: ' + required)
+
 open(sys.argv[2], 'w', encoding='utf-8').write(final)
 PY
 
 cd "$KROOT"
 if ! patch --batch --forward --fuzz=0 -p1 < .equinox-susfs50.patch; then
-    echo "[!] SUSFS 5.10 patch did not apply cleanly. No fuzzy or CRC-bypass fallback is allowed."
-    find . -name '*.rej' -print -exec cat {} \;
+    echo "[!] SUSFS 5.10 patch did not apply cleanly. No fuzzy fallback is allowed."
+    git ls-files --others --exclude-standard -- '*.rej' | while read -r rej; do
+        [ -n "$rej" ] || continue
+        echo "== $rej =="
+        cat "$rej"
+    done
     exit 1
 fi
 rm -f .equinox-susfs50.patch
 
-rejects="$(find . -name '*.rej' -print)"
-[ -z "$rejects" ] || { echo "[!] SUSFS patch rejects remain"; echo "$rejects"; exit 1; }
+# The base tree already contains a tracked historical .rej unrelated to this
+# integration. Only a reject newly created by this run is a failure.
+rejects="$(git ls-files --others --exclude-standard -- '*.rej')"
+[ -z "$rejects" ] || {
+    echo "[!] new SUSFS patch rejects remain"
+    echo "$rejects"
+    exit 1
+}
 
-# Guard against the two shortcuts we explicitly do not accept.
-if git diff | grep -qE 'check_version\(.*return true|abi_gki_protected_exports.*^\+?$'; then
+# Repair declarations that live in the same upstream stat.c hunks as legacy KSU
+# hooks. The sanitizer intentionally drops those mixed hunks, then restores only
+# the declarations required by SUSFS itself. Also remove the orphan `fname`
+# declaration left by old manual-hook hunks if it is present.
+python3 - "$KROOT/fs/open.c" "$KROOT/fs/stat.c" <<'PY'
+import sys
+open_path, stat_path = sys.argv[1:]
+
+orphan = '#ifdef CONFIG_KSU_SUSFS\n\tstruct filename *fname = NULL;\n#endif\n'
+
+open_code = open(open_path, encoding='utf-8').read()
+open_code = open_code.replace(orphan, '', 1)
+open(open_path, 'w', encoding='utf-8').write(open_code)
+
+stat = open(stat_path, encoding='utf-8').read()
+stat = stat.replace(orphan, '', 1)
+
+if '#include <linux/susfs_def.h>' not in stat:
+    anchor = '#include <linux/compat.h>\n'
+    if anchor not in stat:
+        raise SystemExit('[!] fs/stat.c include anchor changed')
+    stat = stat.replace(
+        anchor,
+        anchor + '#ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif\n',
+        1,
+    )
+
+need_decl = (
+    'susfs_is_inode_sus_kstat(' in stat or
+    'susfs_sus_kstat_spoof_generic_fillattr(' in stat
+)
+if need_decl and 'extern bool susfs_is_inode_sus_kstat' not in stat:
+    anchor = '#include "mount.h"\n'
+    if anchor not in stat:
+        raise SystemExit('[!] fs/stat.c declaration anchor changed')
+    decl = '''
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode,
+                                                    struct kstat *stat,
+                                                    u32 result_mask);
+#endif
+'''
+    stat = stat.replace(anchor, anchor + decl, 1)
+
+open(stat_path, 'w', encoding='utf-8').write(stat)
+print('[+] validated fs/open.c and restored SUSFS-only fs/stat.c declarations')
+PY
+
+# Never bypass Android module version/KMI checks.
+if git diff | grep -E 'check_version\(.*return true|abi_gki_protected_exports.*^\+?$' >/dev/null; then
     echo "[!] forbidden module ABI bypass detected"
     exit 1
 fi
 
-# Basic structural validation before Kconfig/build.
+# Structural validation before Kconfig/build.
 grep -q 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile || { echo '[!] fs/susfs.o build wiring missing'; exit 1; }
 grep -q '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h || { echo '[!] SUSFS is not v2.3.0'; exit 1; }
 grep -q 'CMD_SUSFS_ADD_SUS_PATH' "$KSUN_DIR/kernel/supercall/supercall.c" || { echo '[!] SUSFS supercall missing'; exit 1; }
+grep -q 'extern bool susfs_is_inode_sus_kstat' fs/stat.c || { echo '[!] SUSFS stat declarations missing'; exit 1; }
+grep -q 'susfs_sus_kstat_spoof_generic_fillattr' fs/stat.c || { echo '[!] SUSFS stat spoof hook missing'; exit 1; }
+
+# The exact integration that previously compiled successfully must not leave the
+# two known orphan declarations behind.
+if grep -q 'struct filename \*fname = NULL' fs/open.c fs/stat.c; then
+    echo '[!] legacy fname declaration survived SUSFS sanitization'
+    exit 1
+fi
+
+git diff --check
 
 echo "[+] KernelSU-Next v3.3.0 + SUSFS v2.3.0 source integration prepared"
