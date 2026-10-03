@@ -17,7 +17,7 @@ DEPS="${EQUINOX_DEPS:-$HOME/equinox-deps}"
 JOBS="${JOBS:-$(nproc --all)}"
 [ "$JOBS" -le 16 ] || JOBS=16
 
-for cmd in git curl sha256sum tar zstd python3 make patch realpath zip unzip; do
+for cmd in git curl sha256sum tar zstd python3 perl make patch realpath zip unzip; do
     command -v "$cmd" >/dev/null || { echo "[!] missing host tool: $cmd"; exit 1; }
 done
 
@@ -39,6 +39,7 @@ echo "    source   : $MAIN_SHA"
 echo "    base     : $BASE_COMMIT"
 echo "    jobs     : $JOBS"
 echo "    toolchain: $TC"
+echo "    python   : $(python3 --version 2>&1)"
 
 # -----------------------------------------------------------------------------
 # Prepare one pinned toolchain used by both baseline and candidate builds.
@@ -105,6 +106,8 @@ git worktree add --detach "$FINAL_WT" "$MAIN_SHA"
 # -----------------------------------------------------------------------------
 # Build a clean baseline from the exact boot-tested source commit, using the
 # same Neutron toolchain and the same base config stack as the candidate.
+# PYTHON=python3 is passed on the make command line because this 5.10 tree sets
+# PYTHON=python internally and modern Ubuntu no longer ships /usr/bin/python.
 # -----------------------------------------------------------------------------
 echo "[*] building KMI baseline"
 rm -rf "$BASE_OUT"
@@ -112,7 +115,7 @@ mkdir -p "$BASE_OUT" "$DIST"
 
 (
     cd "$BASE_WT"
-    make -s O="$BASE_OUT" LOCALVERSION= gki_defconfig
+    make -s O="$BASE_OUT" LOCALVERSION= PYTHON=python3 gki_defconfig
     scripts/kconfig/merge_config.sh -m -O "$BASE_OUT" \
         "$BASE_OUT/.config" \
         arch/arm64/configs/vendor/waipio_GKI.config \
@@ -120,19 +123,19 @@ mkdir -p "$BASE_OUT" "$DIST"
         arch/arm64/configs/vendor/mondrian_GKI.config \
         arch/arm64/configs/vendor/debugfs.config
 
-    make -s -j"$JOBS" O="$BASE_OUT" LOCALVERSION= olddefconfig
+    make -s -j"$JOBS" O="$BASE_OUT" LOCALVERSION= PYTHON=python3 olddefconfig
     rm -f "$BASE_OUT/include/config/auto.conf" "$BASE_OUT/include/config/auto.conf.cmd"
-    make -s O="$BASE_OUT" LOCALVERSION= olddefconfig
-    make -s O="$BASE_OUT" LOCALVERSION= prepare
+    make -s O="$BASE_OUT" LOCALVERSION= PYTHON=python3 olddefconfig
+    make -s O="$BASE_OUT" LOCALVERSION= PYTHON=python3 prepare
 
-    release="$(make -s O="$BASE_OUT" LOCALVERSION= kernelrelease)"
+    release="$(make -s O="$BASE_OUT" LOCALVERSION= PYTHON=python3 kernelrelease)"
     [ "$release" = "$EXPECTED_KERNEL_RELEASE" ] || {
         echo "[!] baseline kernel release mismatch: $release"
         exit 1
     }
 
     set -o pipefail
-    make -j"$JOBS" O="$BASE_OUT" LOCALVERSION= Image modules 2>&1 | tee "$DIST/build-baseline.log"
+    make -j"$JOBS" O="$BASE_OUT" LOCALVERSION= PYTHON=python3 Image modules 2>&1 | tee "$DIST/build-baseline.log"
 )
 
 BASE_IMAGE="$BASE_OUT/arch/arm64/boot/Image"
