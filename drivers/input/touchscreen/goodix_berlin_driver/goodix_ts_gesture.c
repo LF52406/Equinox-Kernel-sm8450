@@ -246,6 +246,12 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	    cd->nonui_enabled)
 		return EVT_CONTINUE;
 
+	/*
+	 * Always consume and acknowledge the controller event while suspended.
+	 * Whether it may be forwarded to userspace is decided only after the
+	 * packet has been drained. This prevents a stale IRQ from surviving a
+	 * display power transition and retriggering after the panel settles.
+	 */
 	ret = hw_ops->event_handler(cd, &gs_event);
 	if (ret) {
 		ts_err("failed get gesture data");
@@ -255,6 +261,13 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	if (!(gs_event.event_type & EVENT_GESTURE)) {
 		ts_err("invalid event type: 0x%x",
 			cd->ts_event.event_type);
+		goto re_send_ges_cmd;
+	}
+
+	if (!atomic_read(&cd->gesture_reporting_allowed)) {
+		atomic64_inc(&cd->touch_guard.transition_gesture_drops);
+		ts_debug("drop gesture 0x%02x during panel transition",
+			gs_event.gesture_type);
 		goto re_send_ges_cmd;
 	}
 
@@ -314,6 +327,7 @@ static int gsx_gesture_before_suspend(struct goodix_ts_core *cd,
 	struct goodix_ext_module *module)
 {
 	int ret;
+	int clear_ret;
 	const struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 
 	if (cd->gesture_type == 0)
@@ -324,6 +338,18 @@ static int gsx_gesture_before_suspend(struct goodix_ts_core *cd,
 		ts_err("failed enter gesture mode");
 	else
 		ts_info("enter gesture mode, type[0x%02X]", cd->gesture_type);
+
+	/*
+	 * Drain any coordinate/gesture status left by the active scan before
+	 * making the IRQ a wake source. Otherwise a pending status can be
+	 * interpreted as a fresh low-power gesture immediately after suspend.
+	 */
+	if (hw_ops->after_event_handler) {
+		clear_ret = hw_ops->after_event_handler(cd);
+		if (clear_ret)
+			ts_info("warning: failed to clear pending event before gesture wake: %d",
+				clear_ret);
+	}
 
 	hw_ops->irq_enable(cd, true);
 	enable_irq_wake(cd->irq);
@@ -338,6 +364,10 @@ static int gsx_gesture_before_resume(struct goodix_ts_core *cd,
 
 	if (cd->gesture_type == 0)
 		return EVT_CONTINUE;
+
+	/* Stop forwarding low-power gestures before resetting back to active scan. */
+	atomic_set(&cd->gesture_reporting_allowed, 0);
+	notify_oneshot_sensor(ONESHOT_SENSOR_FOD_PRESS, 0);
 
 	disable_irq_wake(cd->irq);
 	hw_ops->reset(cd, GOODIX_NORMAL_RESET_DELAY_MS);
