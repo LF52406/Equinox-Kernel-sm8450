@@ -11,7 +11,9 @@ bash scripts/equinox/build-production.sh
 The production flow is intentionally strict:
 
 - base source is pinned to the known-good Equinox commit;
-- Neutron Clang, KernelSU-Next 3.3.0, SUSFS 2.3.0 and AnyKernel3 are pinned;
+- Neutron Clang, KernelSU-Next, SUSFS 2.3.0 and AnyKernel3 are pinned;
+- the KernelSU-Next release and commit are defined only by `KSUN_TAG` and `KSUN_PIN` in `scripts/equinox/pins.env`;
+- build and package metadata derive the displayed KernelSU-Next version from `KSUN_TAG` instead of duplicating a hardcoded version;
 - a clean baseline `Module.symvers` is built first with the same compiler/config stack;
 - DroidSpaces uses the GKI KMI-safe profile;
 - SYSVIPC fields are relocated into Android KABI reserve slots;
