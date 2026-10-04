@@ -15,6 +15,7 @@ DIST="${DIST:-$HOME/dist/equinox-production}"
 TC="${NEUTRON_DIR:-$HOME/toolchains/neutron-$NEUTRON_BUILD}"
 DEPS="${EQUINOX_DEPS:-$HOME/equinox-deps}"
 JOBS="${JOBS:-$(nproc --all)}"
+KSUN_VERSION="${KSUN_TAG#v}"
 [ "$JOBS" -le 16 ] || JOBS=16
 
 for cmd in git curl sha256sum tar zstd python3 perl make patch realpath zip unzip getconf ldd sort; do
@@ -240,7 +241,7 @@ echo '=========================================='
 echo '        EQUINOX PRODUCTION READY'
 echo '=========================================='
 echo "Kernel release : $EXPECTED_KERNEL_RELEASE"
-echo 'KernelSU-Next  : 3.3.0'
+echo "KernelSU-Next  : $KSUN_VERSION"
 echo 'SUSFS          : 2.3.0'
 echo 'DroidSpaces    : supported, KMI-safe profile'
 echo 'KMI            : PASS (changed_crc=0, removed=0)'
