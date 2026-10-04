@@ -1,21 +1,21 @@
 <div align="center">
 
-<img src="assets/equinox-banner.jpg" alt="Equinox Kernel" width="100%">
+<img src="assets/equinox-banner.png" alt="Equinox Kernel" width="100%">
 
 <br>
 
-[![Latest Release](https://img.shields.io/github/v/release/LF52406/Equinox-Kernel-sm8450?display_name=tag&style=for-the-badge&label=RELEASE&labelColor=0b1020&color=f59e0b)](../../releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/LF52406/Equinox-Kernel-sm8450?display_name=tag&style=for-the-badge&label=RELEASE&labelColor=0b1020&color=f59e0b)](../../releases)
 [![Linux](https://img.shields.io/badge/Linux-5.10.269-38bdf8?style=for-the-badge&labelColor=0b1020)](https://www.kernel.org/)
 [![KernelSU Next](https://img.shields.io/badge/KernelSU--Next-3.4.0-a78bfa?style=for-the-badge&labelColor=0b1020)](https://github.com/KernelSU-Next/KernelSU-Next)
 [![SUSFS](https://img.shields.io/badge/SUSFS-2.3.0-f59e0b?style=for-the-badge&labelColor=0b1020)](https://gitlab.com/simonpunk/susfs4ksu)
-[![KMI](https://img.shields.io/badge/KMI-VERIFIED-22c55e?style=for-the-badge&labelColor=0b1020)](../../tree/equinox)
+[![KMI](https://img.shields.io/badge/KMI-VERIFIED-22c55e?style=for-the-badge&labelColor=0b1020)](#07--build--integrity)
 [![Downloads](https://img.shields.io/github/downloads/LF52406/Equinox-Kernel-sm8450/total?style=for-the-badge&label=DOWNLOADS&labelColor=0b1020&color=22c55e)](../../releases)
 
 ### Custom Android kernel for POCO F5 Pro / Redmi K60
 
-`mondrian` · Qualcomm SM8475 · Snapdragon 8+ Gen 1 · Android 17
+`mondrian` · Qualcomm SM8475 / waipio · Snapdragon 8+ Gen 1 · Android 17
 
-### [⬇ Download latest Equinox build](../../releases/latest)
+### [⬇ Download Equinox Kernel](../../releases)
 
 </div>
 
@@ -37,19 +37,19 @@
 | **Toolchain** | Neutron Clang `24.0.0git` |
 | **KMI** | Verified |
 
-> Exact versions and changes for each build are published with its GitHub Release.
+> Exact build information and checksums are published with each GitHub Release.
 
 ---
 
 ## ![02](https://img.shields.io/badge/02-38bdf8?style=flat-square&labelColor=0b1020) Features
 
-### Root & filesystem
+### Root & Hiding
 
 | Feature | Status |
 |:--|:--:|
 | KernelSU-Next | ✅ Built-in |
-| SUSFS 2.3.0 | ✅ Supported |
-| Kernel root stack | ✅ Integrated |
+| SUSFS | ✅ Supported |
+| Production root stack | ✅ Integrated |
 
 ### Containers
 
@@ -71,7 +71,7 @@
 
 BBR is built into Equinox and has been verified on real TCP connections. CUBIC remains the default congestion-control algorithm.
 
-### Kernel & build
+### Kernel & Build
 
 | Feature | Status |
 |:--|:--:|
@@ -103,7 +103,7 @@ BBR is built into Equinox and has been verified on real TCP connections. CUBIC r
 - Added strict production KMI validation
 - Added verified AnyKernel3 production packaging
 
-[**View all releases →**](../../releases)
+[**View releases and full release notes →**](../../releases)
 
 ---
 
@@ -111,13 +111,13 @@ BBR is built into Equinox and has been verified on real TCP connections. CUBIC r
 
 Official Equinox builds are distributed through **GitHub Releases**.
 
-### [⬇ Download latest release](../../releases/latest)
+### [⬇ Download latest available build](../../releases)
 
 Current package:
 
 `Equinox-5.10.269-mondrian.zip`
 
-Every release includes the exact kernel information, release changes and SHA256 checksum. Use the Equinox flashable ZIP from **Assets**. GitHub-generated source archives are not flashable kernel packages.
+Use the Equinox flashable ZIP from **Assets**. GitHub-generated `Source code` archives are not flashable kernel packages.
 
 ---
 
@@ -125,8 +125,8 @@ Every release includes the exact kernel information, release changes and SHA256 
 
 1. Back up your current working kernel or `boot.img`.
 2. Make sure you have a working recovery or fastboot restore method.
-3. Download the latest Equinox ZIP from **Releases**.
-4. Verify the SHA256 checksum when possible.
+3. Download the Equinox ZIP from **Releases**.
+4. Verify the published SHA256 checksum when possible.
 5. Flash the AnyKernel3 package and reboot.
 
 Equinox release packages replace the kernel Image while preserving the ROM boot environment.
@@ -135,7 +135,7 @@ Equinox release packages replace the kernel Image while preserving the ROM boot 
 
 ## ![06](https://img.shields.io/badge/06-ef4444?style=flat-square&labelColor=0b1020) Bug Reports
 
-When reporting a problem, include the Equinox kernel version, a clear description and steps to reproduce it.
+When reporting a problem, include the Equinox kernel version, a clear description and the steps required to reproduce it.
 
 Useful logs:
 
@@ -155,25 +155,7 @@ Official Equinox builds are produced through the project production pipeline usi
 
 ---
 
-## ![08](https://img.shields.io/badge/08-ec4899?style=flat-square&labelColor=0b1020) Support Development
-
-Equinox Kernel is developed independently by **LF52406**.
-
-If you like my work and want to support further development, you can make a voluntary donation. Your support helps cover build-server costs, development infrastructure, testing and future kernel improvements.
-
-Donations are completely optional, but every contribution helps me continue investing time and resources into Equinox Kernel.
-
-<div align="center">
-
-[![PayPal](https://img.shields.io/badge/PayPal-Support-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.me/LF52406)
-[![Patreon](https://img.shields.io/badge/Patreon-Support-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/InfernalGT)
-[![Boosty](https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/infernalgt/donate)
-
-</div>
-
----
-
-## ![09](https://img.shields.io/badge/09-60a5fa?style=flat-square&labelColor=0b1020) Credits & Upstreams
+## ![08](https://img.shields.io/badge/08-60a5fa?style=flat-square&labelColor=0b1020) Credits & Upstreams
 
 Equinox Kernel is built on open-source Android and Linux kernel work. Thanks to all upstream developers and contributors whose work makes this project possible.
 
@@ -214,7 +196,25 @@ Equinox Kernel is built on open-source Android and Linux kernel work. Thanks to 
   Flashable kernel packaging framework used for Equinox releases.
 
 - **Qualcomm, Xiaomi, LineageOS and Linux kernel contributors**  
-  For the underlying device, SoC, driver and kernel work used by the mondrian / SM8475 platform.
+  Device, SoC, driver and kernel work used by the mondrian / SM8475 platform.
+
+---
+
+## ![09](https://img.shields.io/badge/09-ec4899?style=flat-square&labelColor=0b1020) Support Development
+
+Equinox Kernel is developed independently.
+
+If you find Equinox useful and would like to support its continued development, you can make a voluntary donation. Contributions help cover build-server costs, development infrastructure, testing and future kernel work.
+
+Support is completely optional, and every contribution is appreciated.
+
+<div align="center">
+
+[![PayPal](https://img.shields.io/badge/PayPal-Support-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.me/LF52406)
+[![Patreon](https://img.shields.io/badge/Patreon-Support-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/InfernalGT)
+[![Boosty](https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/infernalgt/donate)
+
+</div>
 
 ---
 
