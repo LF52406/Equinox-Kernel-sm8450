@@ -85,6 +85,7 @@ ui_print " Kernel   : 5.10.269-Equinox"
 ui_print " KSUN     : @KSUN_VERSION@"
 ui_print " SUSFS    : 2.3.0"
 ui_print " Spaces   : DroidSpaces support"
+ui_print " TCP      : BBR support (CUBIC default)"
 ui_print " Slot     : ${active_slot}"
 ui_print " Target   : ${BLOCK}"
 ui_print " =========================================="
@@ -120,6 +121,8 @@ Changes:
 - Integrated KernelSU-Next $KSUN_VERSION
 - Integrated SUSFS 2.3.0
 - Added DroidSpaces GKI support
+- Added TCP BBR congestion control support
+- Kept CUBIC as the default TCP congestion control
 - Applied Android KABI relocation for SYSVIPC task_struct fields
 - Applied Android KABI relocation for POSIX_MQUEUE user_struct mq_bytes
 - Used minimal DroidSpaces GKI production configuration
