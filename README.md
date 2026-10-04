@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/equinox-banner.png" alt="Equinox Kernel" width="100%">
+<img src="equinox-banner.png" alt="Equinox Kernel" width="100%">
 
 # Equinox Kernel
 
