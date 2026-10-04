@@ -2,7 +2,7 @@
 
 <img src="assets/equinox-banner.png" alt="Equinox Kernel" width="100%">
 
-<br>
+# Equinox Kernel
 
 [![Linux](https://img.shields.io/badge/Linux-5.10.269-38bdf8?style=for-the-badge&labelColor=0b1020)](https://www.kernel.org/)
 [![KernelSU Next](https://img.shields.io/badge/KernelSU--Next-3.4.0-a78bfa?style=for-the-badge&labelColor=0b1020)](https://github.com/KernelSU-Next/KernelSU-Next)
@@ -10,8 +10,8 @@
 [![BBR](https://img.shields.io/badge/TCP-BBR-22c55e?style=for-the-badge&labelColor=0b1020)](#features)
 [![KMI](https://img.shields.io/badge/KMI-VERIFIED-14b8a6?style=for-the-badge&labelColor=0b1020)](#current-build)
 
-**Custom Android kernel for POCO F5 Pro / Redmi K60**  
-`mondrian` · Qualcomm SM8475 / waipio · Snapdragon 8+ Gen 1 · Android 17
+**Custom kernel for POCO F5 Pro / Redmi K60**  
+`mondrian` · Qualcomm SM8475 / waipio · Snapdragon 8+ Gen 1
 
 **Developer:** [LF52406](https://github.com/LF52406)
 
@@ -81,21 +81,11 @@ When reporting a problem, include the kernel version, a short reproduction descr
 
 ---
 
-## Credits & Upstreams
-
-- **Kernel base:** [LineageOS/android_kernel_xiaomi_sm8450](https://github.com/LineageOS/android_kernel_xiaomi_sm8450), [LineageOS/android_kernel_qcom_sm8450](https://github.com/LineageOS/android_kernel_qcom_sm8450), [Android Common Kernel](https://android.googlesource.com/kernel/common), [Linux](https://www.kernel.org/)
-- **Root:** [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next), [SUSFS](https://gitlab.com/simonpunk/susfs4ksu) by simonpunk, [Zhanfg/susfs4ksu](https://github.com/Zhanfg/susfs4ksu)
-- **Containers:** [DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS) by ravindu644
-- **Toolchain:** [Neutron Clang](https://github.com/Neutron-Toolchains/clang-build-catalogue)
-- **Packaging:** [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by osm0sis
-
-Thanks to Qualcomm, Xiaomi, LineageOS and Linux kernel contributors for the underlying platform and upstream work.
-
----
-
 ## Support Development
 
-If you like Equinox Kernel and want to support its continued development, voluntary donations help cover build-server costs, development infrastructure and testing. Support is completely optional and always appreciated.
+If you like **Equinox Kernel** and want to support its continued development, voluntary donations help cover build-server costs, development infrastructure and testing.
+
+Support is completely optional and always appreciated.
 
 <div align="center">
 
@@ -104,3 +94,18 @@ If you like Equinox Kernel and want to support its continued development, volunt
 [![Boosty](https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/infernalgt/donate)
 
 </div>
+
+---
+
+## Credits & Upstreams
+
+Thanks to the developers and projects whose work is used by Equinox Kernel:
+
+- **LineageOS** - Xiaomi SM8450 device kernel and Qualcomm SM8450 common-kernel upstream
+- **Android Common Kernel / Linux Kernel** - Android kernel infrastructure and upstream Linux development
+- **KernelSU-Next** - kernel root implementation
+- **simonpunk / SUSFS** and **Zhanfg/susfs4ksu** - SUSFS and Linux 5.10 integration
+- **ravindu644 / DroidSpaces** - container runtime and kernel requirements
+- **Neutron Toolchains** - LLVM/Clang toolchain used for Equinox production builds
+- **osm0sis / AnyKernel3** - flashable kernel packaging framework
+- **Qualcomm, Xiaomi, LineageOS and Linux kernel contributors** - platform, driver and upstream kernel work
