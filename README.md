@@ -1,150 +1,231 @@
-# How do I submit patches to Android Common Kernels
+<div align="center">
 
-1. BEST: Make all of your changes to upstream Linux. If appropriate, backport to the stable releases.
-   These patches will be merged automatically in the corresponding common kernels. If the patch is already
-   in upstream Linux, post a backport of the patch that conforms to the patch requirements below.
-   - Do not send patches upstream that contain only symbol exports. To be considered for upstream Linux,
-additions of `EXPORT_SYMBOL_GPL()` require an in-tree modular driver that uses the symbol -- so include
-the new driver or changes to an existing driver in the same patchset as the export.
-   - When sending patches upstream, the commit message must contain a clear case for why the patch
-is needed and beneficial to the community. Enabling out-of-tree drivers or functionality is not
-not a persuasive case.
+<img src="assets/equinox-banner.jpg" alt="Equinox Kernel" width="100%">
 
-2. LESS GOOD: Develop your patches out-of-tree (from an upstream Linux point-of-view). Unless these are
-   fixing an Android-specific bug, these are very unlikely to be accepted unless they have been
-   coordinated with kernel-team@android.com. If you want to proceed, post a patch that conforms to the
-   patch requirements below.
+<br>
 
-# Common Kernel patch requirements
+[![Latest Release](https://img.shields.io/github/v/release/LF52406/Equinox-Kernel-sm8450?display_name=tag&style=for-the-badge&label=RELEASE&labelColor=0b1020&color=f59e0b)](../../releases/latest)
+[![Linux](https://img.shields.io/badge/Linux-5.10.269-38bdf8?style=for-the-badge&labelColor=0b1020)](https://www.kernel.org/)
+[![KernelSU Next](https://img.shields.io/badge/KernelSU--Next-3.4.0-a78bfa?style=for-the-badge&labelColor=0b1020)](https://github.com/KernelSU-Next/KernelSU-Next)
+[![SUSFS](https://img.shields.io/badge/SUSFS-2.3.0-f59e0b?style=for-the-badge&labelColor=0b1020)](https://gitlab.com/simonpunk/susfs4ksu)
+[![KMI](https://img.shields.io/badge/KMI-VERIFIED-22c55e?style=for-the-badge&labelColor=0b1020)](../../tree/equinox)
+[![Downloads](https://img.shields.io/github/downloads/LF52406/Equinox-Kernel-sm8450/total?style=for-the-badge&label=DOWNLOADS&labelColor=0b1020&color=22c55e)](../../releases)
 
-- All patches must conform to the Linux kernel coding standards and pass `script/checkpatch.pl`
-- Patches shall not break gki_defconfig or allmodconfig builds for arm, arm64, x86, x86_64 architectures
-(see  https://source.android.com/setup/build/building-kernels)
-- If the patch is not merged from an upstream branch, the subject must be tagged with the type of patch:
-`UPSTREAM:`, `BACKPORT:`, `FROMGIT:`, `FROMLIST:`, or `ANDROID:`.
-- All patches must have a `Change-Id:` tag (see https://gerrit-review.googlesource.com/Documentation/user-changeid.html)
-- If an Android bug has been assigned, there must be a `Bug:` tag.
-- All patches must have a `Signed-off-by:` tag by the author and the submitter
+### Custom Android kernel for POCO F5 Pro / Redmi K60
 
-Additional requirements are listed below based on patch type
+`mondrian` · Qualcomm SM8475 · Snapdragon 8+ Gen 1 · Android 17
 
-## Requirements for backports from mainline Linux: `UPSTREAM:`, `BACKPORT:`
+### [⬇ Download latest Equinox build](../../releases/latest)
 
-- If the patch is a cherry-pick from Linux mainline with no changes at all
-    - tag the patch subject with `UPSTREAM:`.
-    - add upstream commit information with a `(cherry picked from commit ...)` line
-    - Example:
-        - if the upstream commit message is
-```
-        important patch from upstream
+</div>
 
-        This is the detailed description of the important patch
+---
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
-```
->- then Joe Smith would upload the patch for the common kernel as
-```
-        UPSTREAM: important patch from upstream
+## ![01](https://img.shields.io/badge/01-f59e0b?style=flat-square&labelColor=0b1020) Current Build
 
-        This is the detailed description of the important patch
+| Component | Current |
+|:--|:--|
+| **Kernel** | `5.10.269-Equinox` |
+| **Device** | POCO F5 Pro / Redmi K60 |
+| **Codename** | `mondrian` |
+| **Platform** | Qualcomm SM8475 / waipio |
+| **KernelSU-Next** | `3.4.0` |
+| **SUSFS** | `2.3.0` |
+| **DroidSpaces** | Supported |
+| **TCP BBR** | Supported and verified |
+| **Default TCP CC** | CUBIC |
+| **Toolchain** | Neutron Clang `24.0.0git` |
+| **KMI** | Verified |
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+> Exact versions and changes for each build are published with its GitHub Release.
 
-        Bug: 135791357
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        (cherry picked from commit c31e73121f4c1ec41143423ac6ce3ce6dafdcec1)
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+---
 
-- If the patch requires any changes from the upstream version, tag the patch with `BACKPORT:`
-instead of `UPSTREAM:`.
-    - use the same tags as `UPSTREAM:`
-    - add comments about the changes under the `(cherry picked from commit ...)` line
-    - Example:
-```
-        BACKPORT: important patch from upstream
+## ![02](https://img.shields.io/badge/02-38bdf8?style=flat-square&labelColor=0b1020) Features
 
-        This is the detailed description of the important patch
+### Root & filesystem
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+| Feature | Status |
+|:--|:--:|
+| KernelSU-Next | ✅ Built-in |
+| SUSFS 2.3.0 | ✅ Supported |
+| Kernel root stack | ✅ Integrated |
 
-        Bug: 135791357
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        (cherry picked from commit c31e73121f4c1ec41143423ac6ce3ce6dafdcec1)
-        [joe: Resolved minor conflict in drivers/foo/bar.c ]
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+### Containers
 
-## Requirements for other backports: `FROMGIT:`, `FROMLIST:`,
+| Feature | Status |
+|:--|:--:|
+| DroidSpaces | ✅ Supported |
+| PID namespaces | ✅ Enabled |
+| IPC / SYSVIPC | ✅ Enabled |
+| KMI-safe integration | ✅ Verified |
+| Linux container startup | ✅ Tested |
 
-- If the patch has been merged into an upstream maintainer tree, but has not yet
-been merged into Linux mainline
-    - tag the patch subject with `FROMGIT:`
-    - add info on where the patch came from as `(cherry picked from commit <sha1> <repo> <branch>)`. This
-must be a stable maintainer branch (not rebased, so don't use `linux-next` for example).
-    - if changes were required, use `BACKPORT: FROMGIT:`
-    - Example:
-        - if the commit message in the maintainer tree is
-```
-        important patch from upstream
+### Networking
 
-        This is the detailed description of the important patch
+| Feature | Status |
+|:--|:--:|
+| TCP BBR | ✅ Supported and verified |
+| CUBIC | ✅ Default |
+| Runtime TCP congestion-control switching | ✅ Supported |
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
-```
->- then Joe Smith would upload the patch for the common kernel as
-```
-        FROMGIT: important patch from upstream
+BBR is built into Equinox and has been verified on real TCP connections. CUBIC remains the default congestion-control algorithm.
 
-        This is the detailed description of the important patch
+### Kernel & build
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+| Feature | Status |
+|:--|:--:|
+| Full LTO | ✅ Enabled |
+| Clang CFI | ✅ Enabled |
+| MODVERSIONS | ✅ Enabled |
+| Production KMI validation | ✅ Enabled |
+| Pinned external dependencies | ✅ Enabled |
+| AnyKernel3 packaging | ✅ Verified |
 
-        Bug: 135791357
-        (cherry picked from commit 878a2fd9de10b03d11d2f622250285c7e63deace
-         https://git.kernel.org/pub/scm/linux/kernel/git/foo/bar.git test-branch)
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+### Device-specific
 
+- Goodix touch stability fixes for mondrian
+- POCO F5 Pro / Redmi K60 production configuration
+- Android 17 compatible kernel branch
 
-- If the patch has been submitted to LKML, but not accepted into any maintainer tree
-    - tag the patch subject with `FROMLIST:`
-    - add a `Link:` tag with a link to the submittal on lore.kernel.org
-    - add a `Bug:` tag with the Android bug (required for patches not accepted into
-a maintainer tree)
-    - if changes were required, use `BACKPORT: FROMLIST:`
-    - Example:
-```
-        FROMLIST: important patch from upstream
+---
 
-        This is the detailed description of the important patch
+## ![03](https://img.shields.io/badge/03-a78bfa?style=flat-square&labelColor=0b1020) Latest Changes
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+### Linux 5.10.269
 
-        Bug: 135791357
-        Link: https://lore.kernel.org/lkml/20190619171517.GA17557@someone.com/
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+- Updated KernelSU-Next to `3.4.0`
+- Integrated SUSFS `2.3.0`
+- Added DroidSpaces support using the KMI-safe production profile
+- Added TCP BBR congestion-control support
+- Verified BBR operation on real TCP connections
+- Kept CUBIC as the default TCP congestion-control algorithm
+- Added strict production KMI validation
+- Added verified AnyKernel3 production packaging
 
-## Requirements for Android-specific patches: `ANDROID:`
+[**View all releases →**](../../releases)
 
-- If the patch is fixing a bug to Android-specific code
-    - tag the patch subject with `ANDROID:`
-    - add a `Fixes:` tag that cites the patch with the bug
-    - Example:
-```
-        ANDROID: fix android-specific bug in foobar.c
+---
 
-        This is the detailed description of the important fix
+## ![04](https://img.shields.io/badge/04-22c55e?style=flat-square&labelColor=0b1020) Downloads
 
-        Fixes: 1234abcd2468 ("foobar: add cool feature")
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+Official Equinox builds are distributed through **GitHub Releases**.
 
-- If the patch is a new feature
-    - tag the patch subject with `ANDROID:`
-    - add a `Bug:` tag with the Android bug (required for android-specific features)
+### [⬇ Download latest release](../../releases/latest)
 
+Current package:
+
+`Equinox-5.10.269-mondrian.zip`
+
+Every release includes the exact kernel information, release changes and SHA256 checksum. Use the Equinox flashable ZIP from **Assets**. GitHub-generated source archives are not flashable kernel packages.
+
+---
+
+## ![05](https://img.shields.io/badge/05-f97316?style=flat-square&labelColor=0b1020) Installation
+
+1. Back up your current working kernel or `boot.img`.
+2. Make sure you have a working recovery or fastboot restore method.
+3. Download the latest Equinox ZIP from **Releases**.
+4. Verify the SHA256 checksum when possible.
+5. Flash the AnyKernel3 package and reboot.
+
+Equinox release packages replace the kernel Image while preserving the ROM boot environment.
+
+---
+
+## ![06](https://img.shields.io/badge/06-ef4444?style=flat-square&labelColor=0b1020) Bug Reports
+
+When reporting a problem, include the Equinox kernel version, a clear description and steps to reproduce it.
+
+Useful logs:
+
+- `adb bugreport`
+- `logcat`
+- `dmesg`
+- `pstore / ramoops`
+- kernel panic / watchdog logs when available
+
+Reports with logs are significantly easier to investigate.
+
+---
+
+## ![07](https://img.shields.io/badge/07-14b8a6?style=flat-square&labelColor=0b1020) Build & Integrity
+
+Official Equinox builds are produced through the project production pipeline using pinned external dependencies. The production kernel is compared against a known-good baseline before packaging, and release packaging proceeds only after the required KMI checks pass.
+
+---
+
+## ![08](https://img.shields.io/badge/08-ec4899?style=flat-square&labelColor=0b1020) Support Development
+
+Equinox Kernel is developed independently by **LF52406**.
+
+If you like my work and want to support further development, you can make a voluntary donation. Your support helps cover build-server costs, development infrastructure, testing and future kernel improvements.
+
+Donations are completely optional, but every contribution helps me continue investing time and resources into Equinox Kernel.
+
+<div align="center">
+
+[![PayPal](https://img.shields.io/badge/PayPal-Support-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.me/LF52406)
+[![Patreon](https://img.shields.io/badge/Patreon-Support-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/InfernalGT)
+[![Boosty](https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/infernalgt/donate)
+
+</div>
+
+---
+
+## ![09](https://img.shields.io/badge/09-60a5fa?style=flat-square&labelColor=0b1020) Credits & Upstreams
+
+Equinox Kernel is built on open-source Android and Linux kernel work. Thanks to all upstream developers and contributors whose work makes this project possible.
+
+- **[LF52406](https://github.com/LF52406)**  
+  Developer of Equinox Kernel.
+
+- **[LineageOS/android_kernel_xiaomi_sm8450](https://github.com/LineageOS/android_kernel_xiaomi_sm8450)**  
+  Xiaomi SM8450 device-kernel base and upstream source used by Equinox.
+
+- **[LineageOS/android_kernel_qcom_sm8450](https://github.com/LineageOS/android_kernel_qcom_sm8450)**  
+  Qualcomm SM8450 common-kernel upstream and source of platform fixes.
+
+- **[Android Common Kernel](https://android.googlesource.com/kernel/common)**  
+  Android kernel infrastructure, GKI/KMI work and Android-specific kernel changes.
+
+- **[Linux Kernel](https://www.kernel.org/)**  
+  Linux upstream and stable kernel development.
+
+- **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)**  
+  Kernel root implementation used by Equinox.
+
+- **[SUSFS](https://gitlab.com/simonpunk/susfs4ksu)** by **simonpunk**  
+  Original SUSFS project.
+
+- **[Zhanfg/susfs4ksu](https://github.com/Zhanfg/susfs4ksu)**  
+  Android 13 / Linux 5.10 SUSFS integration source used by the Equinox production build.
+
+- **[DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS)** by **ravindu644**  
+  Android/Linux container runtime supported by Equinox.
+
+- **[Neutron Clang](https://github.com/Neutron-Toolchains/clang-build-catalogue)**  
+  LLVM/Clang toolchain used for official Equinox production builds.
+
+- **[Neutron antman](https://github.com/Neutron-Toolchains/antman)**  
+  Toolchain compatibility utility used by the Equinox build system when required by the build host.
+
+- **[AnyKernel3](https://github.com/osm0sis/AnyKernel3)** by **osm0sis**  
+  Flashable kernel packaging framework used for Equinox releases.
+
+- **Qualcomm, Xiaomi, LineageOS and Linux kernel contributors**  
+  For the underlying device, SoC, driver and kernel work used by the mondrian / SM8475 platform.
+
+---
+
+<div align="center">
+
+### Equinox Kernel
+
+**Developer:** [LF52406](https://github.com/LF52406)
+
+POCO F5 Pro / Redmi K60 · `mondrian`
+
+[Releases](../../releases) · [Issues](../../issues)
+
+</div>
