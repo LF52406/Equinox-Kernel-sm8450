@@ -4,18 +4,10 @@
 
 # Equinox Kernel
 
-[![Linux](https://img.shields.io/badge/Linux-5.10.269-38bdf8?style=for-the-badge&labelColor=0b1020)](https://www.kernel.org/)
-[![KernelSU Next](https://img.shields.io/badge/KernelSU--Next-3.4.0-a78bfa?style=for-the-badge&labelColor=0b1020)](https://github.com/KernelSU-Next/KernelSU-Next)
-[![SUSFS](https://img.shields.io/badge/SUSFS-2.3.0-f59e0b?style=for-the-badge&labelColor=0b1020)](https://gitlab.com/simonpunk/susfs4ksu)
-[![BBR](https://img.shields.io/badge/TCP-BBR-22c55e?style=for-the-badge&labelColor=0b1020)](#features)
-[![KMI](https://img.shields.io/badge/KMI-VERIFIED-14b8a6?style=for-the-badge&labelColor=0b1020)](#current-build)
+**POCO F5 Pro / Redmi K60** · `mondrian` · Snapdragon 8+ Gen 1  
+`Linux 5.10.269` · `KernelSU-Next 3.4.0` · `SUSFS 2.3.0` · `DroidSpaces` · `TCP BBR` · `KMI Verified`
 
-**Custom kernel for POCO F5 Pro / Redmi K60**  
-`mondrian` · Qualcomm SM8475 / waipio · Snapdragon 8+ Gen 1
-
-**Developer:** [LF52406](https://github.com/LF52406)
-
-### [Download builds](../../releases)
+**Developer:** [LF52406](https://github.com/LF52406) · **[Download builds](../../releases)**
 
 </div>
 
