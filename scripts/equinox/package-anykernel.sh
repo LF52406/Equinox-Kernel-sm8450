@@ -12,6 +12,7 @@ KMI_REPORT="${KMI_REPORT:-$DIST/kmi-kmi-safe.txt}"
 AK3="${ANYKERNEL_DIR:-$HOME/build/AnyKernel3-equinox}"
 ZIP_NAME="${ZIP_NAME:-Equinox-5.10.269-mondrian.zip}"
 IMAGE="$OUT/arch/arm64/boot/Image"
+KSUN_VERSION="${KSUN_TAG#v}"
 
 for cmd in git zip unzip sha256sum make; do
     command -v "$cmd" >/dev/null || { echo "[!] missing host tool: $cmd"; exit 1; }
@@ -81,7 +82,7 @@ ui_print " =========================================="
 ui_print " Device   : POCO F5 Pro / Redmi K60"
 ui_print " Codename : mondrian"
 ui_print " Kernel   : 5.10.269-Equinox"
-ui_print " KSUN     : 3.3.0"
+ui_print " KSUN     : @KSUN_VERSION@"
 ui_print " SUSFS    : 2.3.0"
 ui_print " Spaces   : DroidSpaces support"
 ui_print " Slot     : ${active_slot}"
@@ -99,6 +100,7 @@ ui_print " "
 ui_print " Equinox installation complete."
 ui_print " "
 AK3EOF
+sed -i "s/@KSUN_VERSION@/$KSUN_VERSION/g" "$AK3/anykernel.sh"
 chmod 0755 "$AK3/anykernel.sh"
 sh -n "$AK3/anykernel.sh"
 
@@ -115,7 +117,7 @@ Toolchain: $clang_line
 Changes:
 - Updated kernel base to Linux 5.10.269
 - Built with pinned Neutron Clang
-- Integrated KernelSU-Next 3.3.0
+- Integrated KernelSU-Next $KSUN_VERSION
 - Integrated SUSFS 2.3.0
 - Added DroidSpaces GKI support
 - Applied Android KABI relocation for SYSVIPC task_struct fields
