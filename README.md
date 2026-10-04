@@ -17,7 +17,7 @@
 | Component | Current |
 |:--|:--|
 | **Kernel** | `5.10.269-Equinox` |
-| **Compatibility** | Android 17 · AOSP-based ROMs |
+| **Compatibility** | Android 16–17 · AOSP-based ROMs |
 | **Toolchain** | Neutron Clang `24.0.0git` |
 | **Root stack** | KernelSU-Next `3.4.0` · SUSFS `2.3.0` |
 | **Containers** | DroidSpaces |
@@ -99,4 +99,4 @@ If you find **Equinox Kernel** useful and would like to support its continued de
 - [**Neutron Toolchains**](https://github.com/Neutron-Toolchains/clang-build-catalogue) — LLVM/Clang toolchain
 - [**AnyKernel3**](https://github.com/osm0sis/AnyKernel3) by **osm0sis** — flashable kernel packaging
 
-Thanks to Qualcomm, Xiaomi, LineageOS and Linux kernel contributors for the underlying platform, driver and upstream work.
+Thanks to Qualcomm, LineageOS contributors, Android Common Kernel contributors, and the broader Linux kernel community for the upstream kernel, platform, and driver work that Equinox builds upon.
