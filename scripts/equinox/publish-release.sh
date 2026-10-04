@@ -100,16 +100,8 @@ fi
 TMP_NOTES="$(mktemp)"
 trap 'rm -f "$TMP_NOTES"' EXIT
 cat "$NOTES" > "$TMP_NOTES"
-cat >> "$TMP_NOTES" <<EOF
-
-## Download
-
-**$(basename "$ZIP")**
-
-SHA256: \\`$SHA256\\`
-
-> Download the flashable Equinox ZIP from **Assets**. GitHub-generated source archives are not flashable kernel packages.
-EOF
+printf '\n## Download\n\n**%s**\n\nSHA256: `%s`\n\n> Download the flashable Equinox ZIP from **Assets**. GitHub-generated source archives are not flashable kernel packages.\n' \
+  "$(basename "$ZIP")" "$SHA256" >> "$TMP_NOTES"
 
 echo "[4/6] Creating GitHub Release"
 gh release create "$TAG" \
