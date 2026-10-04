@@ -3,6 +3,7 @@ set -euo pipefail
 
 KROOT="${1:-$PWD}"
 SCHED="$KROOT/include/linux/sched.h"
+KSUN_KCONFIG="$KROOT/drivers/kernelsu/Kconfig"
 
 [ -f "$SCHED" ] || { echo "[!] missing $SCHED"; exit 1; }
 
@@ -62,6 +63,48 @@ s = s.replace(old_reserves, new_reserves, 1)
 open(path, "w", encoding="utf-8").write(s)
 print("[+] SYSVIPC relocated: sysvsem -> reserve 6, sysvshm -> reserves 7+8")
 PY
+
+# SUSFS 2.3.0 currently contains one help line whose indentation is
+# "tab + spaces + tab". Kconfig rejects that as "space before tab in indent".
+# The KernelSU checkout is linked under drivers/kernelsu, so normalize only
+# leading whitespace there after the SUSFS menu has been integrated.
+if [ -f "$KSUN_KCONFIG" ]; then
+    python3 - "$KSUN_KCONFIG" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+lines = text.splitlines(keepends=True)
+changed = 0
+out = []
+
+for line in lines:
+    m = re.match(r"^[ \t]+", line)
+    if m:
+        prefix = m.group(0)
+        normalized = prefix
+        while " \t" in normalized:
+            normalized = normalized.replace(" \t", "  ")
+        if normalized != prefix:
+            line = normalized + line[len(prefix):]
+            changed += 1
+    out.append(line)
+
+open(path, "w", encoding="utf-8").writelines(out)
+
+bad = []
+for no, line in enumerate(out, 1):
+    m = re.match(r"^[ \t]+", line)
+    if m and " \t" in m.group(0):
+        bad.append(no)
+
+if bad:
+    raise SystemExit(f"[!] invalid space-before-tab indentation remains in KernelSU Kconfig: {bad}")
+
+print(f"[+] KernelSU/SUSFS Kconfig indentation normalized ({changed} line(s))")
+PY
+fi
 
 # Never use the upstream global CRC/module-version bypass here.
 if git -C "$KROOT" diff -- include/linux/sched.h | grep -qE 'check_version|CONFIG_MODVERSIONS|abi_gki_protected'; then
