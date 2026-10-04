@@ -14,15 +14,17 @@
 
 ## Current Build
 
-| Component | Current |
-|:--|:--|
-| **Kernel** | `5.10.269-Equinox` |
-| **Compatibility** | Android 16–17 · AOSP-based ROMs |
-| **Toolchain** | Neutron Clang `24.0.0git` |
-| **Root stack** | KernelSU-Next `3.4.0` · SUSFS `2.3.0` |
-| **Containers** | DroidSpaces |
-| **Networking** | TCP BBR · CUBIC default |
-| **Build** | Full LTO · Clang CFI · MODVERSIONS · KMI verified |
+|  | Component | Current |
+|:--:|:--|:--|
+| 🐧 | **Linux** | `5.10.269-Equinox` |
+| 🤖 | **Compatibility** | Android 16–17 · AOSP-based ROMs |
+| ⚡ | **KernelSU-Next** | `3.4.0` |
+| 🛡️ | **SUSFS** | `2.3.0` |
+| 📦 | **DroidSpaces** | Supported |
+| 🌐 | **TCP** | BBR available · CUBIC default |
+| 🛠️ | **Toolchain** | Neutron Clang `24.0.0git` |
+| ⚙️ | **Build** | Full LTO · Clang CFI · MODVERSIONS |
+| 🔒 | **KMI** | Verified |
 
 ---
 
