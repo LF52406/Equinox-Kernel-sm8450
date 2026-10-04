@@ -99,8 +99,8 @@ Support is completely optional and always appreciated.
 
 ## Credits & Upstreams
 
-- [**LineageOS/android_kernel_xiaomi_sm8450**](https://github.com/LineageOS/android_kernel_xiaomi_sm8450) - Xiaomi SM8450 device kernel base
-- [**LineageOS/android_kernel_qcom_sm8450**](https://github.com/LineageOS/android_kernel_qcom_sm8450) - Qualcomm SM8450 common-kernel upstream
+- [**LineageOS/android_kernel_xiaomi_sm8450**](https://github.com/LineageOS/android_kernel_xiaomi_sm8450) - primary kernel base used by Equinox
+- [**LineageOS/android_kernel_qcom_sm8450**](https://github.com/LineageOS/android_kernel_qcom_sm8450) - Qualcomm common-kernel upstream used by Equinox
 - [**Android Common Kernel**](https://android.googlesource.com/kernel/common) / [**Linux Kernel**](https://www.kernel.org/) - Android kernel infrastructure and upstream Linux
 - [**KernelSU-Next**](https://github.com/KernelSU-Next/KernelSU-Next) - kernel root implementation
 - [**SUSFS**](https://gitlab.com/simonpunk/susfs4ksu) by **simonpunk** / [**Zhanfg/susfs4ksu**](https://github.com/Zhanfg/susfs4ksu) - SUSFS integration for Linux 5.10
