@@ -99,13 +99,13 @@ Support is completely optional and always appreciated.
 
 ## Credits & Upstreams
 
-Thanks to the developers and projects whose work is used by Equinox Kernel:
+- [**LineageOS/android_kernel_xiaomi_sm8450**](https://github.com/LineageOS/android_kernel_xiaomi_sm8450) - Xiaomi SM8450 device kernel base
+- [**LineageOS/android_kernel_qcom_sm8450**](https://github.com/LineageOS/android_kernel_qcom_sm8450) - Qualcomm SM8450 common-kernel upstream
+- [**Android Common Kernel**](https://android.googlesource.com/kernel/common) / [**Linux Kernel**](https://www.kernel.org/) - Android kernel infrastructure and upstream Linux
+- [**KernelSU-Next**](https://github.com/KernelSU-Next/KernelSU-Next) - kernel root implementation
+- [**SUSFS**](https://gitlab.com/simonpunk/susfs4ksu) by **simonpunk** / [**Zhanfg/susfs4ksu**](https://github.com/Zhanfg/susfs4ksu) - SUSFS integration for Linux 5.10
+- [**DroidSpaces**](https://github.com/ravindu644/Droidspaces-OSS) by **ravindu644** - container runtime and kernel requirements
+- [**Neutron Toolchains**](https://github.com/Neutron-Toolchains/clang-build-catalogue) - LLVM/Clang toolchain
+- [**AnyKernel3**](https://github.com/osm0sis/AnyKernel3) by **osm0sis** - flashable kernel packaging
 
-- **LineageOS** - Xiaomi SM8450 device kernel and Qualcomm SM8450 common-kernel upstream
-- **Android Common Kernel / Linux Kernel** - Android kernel infrastructure and upstream Linux development
-- **KernelSU-Next** - kernel root implementation
-- **simonpunk / SUSFS** and **Zhanfg/susfs4ksu** - SUSFS and Linux 5.10 integration
-- **ravindu644 / DroidSpaces** - container runtime and kernel requirements
-- **Neutron Toolchains** - LLVM/Clang toolchain used for Equinox production builds
-- **osm0sis / AnyKernel3** - flashable kernel packaging framework
-- **Qualcomm, Xiaomi, LineageOS and Linux kernel contributors** - platform, driver and upstream kernel work
+Thanks to Qualcomm, Xiaomi, LineageOS and Linux kernel contributors for the underlying platform, driver and upstream work.
