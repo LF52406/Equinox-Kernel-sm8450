@@ -17,7 +17,7 @@ DEPS="${EQUINOX_DEPS:-$HOME/equinox-deps}"
 JOBS="${JOBS:-$(nproc --all)}"
 [ "$JOBS" -le 16 ] || JOBS=16
 
-for cmd in git curl sha256sum tar zstd python3 perl make patch realpath zip unzip; do
+for cmd in git curl sha256sum tar zstd python3 perl make patch realpath zip unzip getconf ldd sort; do
     command -v "$cmd" >/dev/null || { echo "[!] missing host tool: $cmd"; exit 1; }
 done
 
@@ -41,8 +41,38 @@ echo "    jobs     : $JOBS"
 echo "    toolchain: $TC"
 echo "    python   : $(python3 --version 2>&1)"
 
+version_ge() {
+    [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]
+}
+
+validate_neutron() {
+    local bin missing
+
+    for bin in clang ld.lld llvm-ar llvm-nm; do
+        [ -x "$TC/bin/$bin" ] || {
+            echo "[!] Neutron tool missing or not executable: $TC/bin/$bin"
+            return 1
+        }
+    done
+
+    "$TC/bin/clang" --version >/dev/null
+    "$TC/bin/ld.lld" --version >/dev/null
+
+    for bin in clang ld.lld; do
+        missing="$(ldd "$TC/bin/$bin" 2>&1 | grep 'not found' || true)"
+        if [ -n "$missing" ]; then
+            echo "[!] unresolved shared libraries for $TC/bin/$bin:"
+            echo "$missing"
+            return 1
+        fi
+    done
+}
+
 # -----------------------------------------------------------------------------
 # Prepare one pinned toolchain used by both baseline and candidate builds.
+# The pinned Neutron build requires glibc 2.43. Only older build hosts need
+# antman's compatibility patch; native-compatible hosts keep the pristine
+# compiler binaries and therefore avoid unnecessary interpreter/rpath rewrites.
 # -----------------------------------------------------------------------------
 if [ ! -x "$TC/bin/clang" ]; then
     echo "[*] fetching Neutron Clang $NEUTRON_BUILD"
@@ -58,24 +88,42 @@ if [ ! -x "$TC/bin/clang" ]; then
     echo "$NEUTRON_SHA256  $archive" | sha256sum -c -
     tar -I zstd -xf "$archive" -C "$TC"
 
-    curl -fL --retry 4 --retry-delay 5 \
-        "https://raw.githubusercontent.com/Neutron-Toolchains/antman/$ANTMAN_COMMIT/antman" \
-        -o "$TC/antman"
-    echo "$ANTMAN_SHA256  $TC/antman" | sha256sum -c -
-    chmod +x "$TC/antman"
+    host_glibc="$(getconf GNU_LIBC_VERSION | awk '{print $2}')"
+    echo "[*] host glibc: $host_glibc (Neutron requires >= $NEUTRON_MIN_GLIBC)"
 
-    patched=0
-    for attempt in 1 2 3 4; do
-        if (cd "$TC" && ./antman --patch=glibc); then
-            patched=1
-            break
-        fi
-        [ "$attempt" -eq 4 ] && break
-        echo "[*] antman retry $attempt"
-        sleep $((attempt * 20))
-    done
-    [ "$patched" -eq 1 ] || { echo '[!] antman glibc patch failed'; exit 1; }
+    if version_ge "$host_glibc" "$NEUTRON_MIN_GLIBC"; then
+        echo '[+] host glibc satisfies Neutron requirement; compatibility patch skipped'
+    else
+        command -v file >/dev/null || {
+            echo '[!] host glibc is older than Neutron requirement and antman needs the `file` utility'
+            echo '[!] install package `file` and retry'
+            exit 1
+        }
+
+        curl -fL --retry 4 --retry-delay 5 \
+            "https://raw.githubusercontent.com/Neutron-Toolchains/antman/$ANTMAN_COMMIT/antman" \
+            -o "$TC/antman"
+        echo "$ANTMAN_SHA256  $TC/antman" | sha256sum -c -
+        chmod +x "$TC/antman"
+
+        patched=0
+        for attempt in 1 2 3 4; do
+            if (cd "$TC" && ./antman --patch=glibc); then
+                patched=1
+                break
+            fi
+            [ "$attempt" -eq 4 ] && break
+            echo "[*] antman retry $attempt"
+            sleep $((attempt * 20))
+        done
+        [ "$patched" -eq 1 ] || { echo '[!] antman glibc patch failed'; exit 1; }
+    fi
 fi
+
+validate_neutron || {
+    echo '[!] Neutron toolchain validation failed'
+    exit 1
+}
 
 export PATH="$TC/bin:$PATH"
 export ARCH=arm64
