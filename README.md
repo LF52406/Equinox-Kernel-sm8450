@@ -102,3 +102,11 @@ If you find **Equinox Kernel** useful and would like to support its continued de
 - [**AnyKernel3**](https://github.com/osm0sis/AnyKernel3) by **osm0sis** — flashable kernel packaging
 
 Thanks to Qualcomm, LineageOS contributors, Android Common Kernel contributors, and the broader Linux kernel community for the upstream kernel, platform, and driver work that Equinox builds upon.
+
+---
+
+## License
+
+Equinox Kernel is based on the Linux kernel and follows its licensing terms. The kernel is distributed under **GPL-2.0 WITH Linux-syscall-note**, with individual files retaining their applicable SPDX license identifiers.
+
+See [COPYING](COPYING), [LICENSES](LICENSES/), and [Documentation/process/license-rules.rst](Documentation/process/license-rules.rst) for details.
