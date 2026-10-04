@@ -1,227 +1,106 @@
 <div align="center">
 
-[![Latest Release](https://img.shields.io/github/v/release/LF52406/Equinox-Kernel-sm8450?display_name=tag&style=for-the-badge&label=RELEASE&labelColor=0b1020&color=f59e0b)](../../releases)
+<img src="assets/equinox-banner.png" alt="Equinox Kernel" width="100%">
+
+<br>
+
 [![Linux](https://img.shields.io/badge/Linux-5.10.269-38bdf8?style=for-the-badge&labelColor=0b1020)](https://www.kernel.org/)
 [![KernelSU Next](https://img.shields.io/badge/KernelSU--Next-3.4.0-a78bfa?style=for-the-badge&labelColor=0b1020)](https://github.com/KernelSU-Next/KernelSU-Next)
 [![SUSFS](https://img.shields.io/badge/SUSFS-2.3.0-f59e0b?style=for-the-badge&labelColor=0b1020)](https://gitlab.com/simonpunk/susfs4ksu)
-[![KMI](https://img.shields.io/badge/KMI-VERIFIED-22c55e?style=for-the-badge&labelColor=0b1020)](#07--build--integrity)
-[![Downloads](https://img.shields.io/github/downloads/LF52406/Equinox-Kernel-sm8450/total?style=for-the-badge&label=DOWNLOADS&labelColor=0b1020&color=22c55e)](../../releases)
+[![BBR](https://img.shields.io/badge/TCP-BBR-22c55e?style=for-the-badge&labelColor=0b1020)](#features)
+[![KMI](https://img.shields.io/badge/KMI-VERIFIED-14b8a6?style=for-the-badge&labelColor=0b1020)](#current-build)
 
-### Custom Android kernel for POCO F5 Pro / Redmi K60
-
+**Custom Android kernel for POCO F5 Pro / Redmi K60**  
 `mondrian` · Qualcomm SM8475 / waipio · Snapdragon 8+ Gen 1 · Android 17
 
-### [⬇ Download Equinox Kernel](../../releases)
+**Developer:** [LF52406](https://github.com/LF52406)
+
+### [Download builds](../../releases)
 
 </div>
 
 ---
 
-## ![01](https://img.shields.io/badge/01-f59e0b?style=flat-square&labelColor=0b1020) Current Build
+## Current Build
 
 | Component | Current |
 |:--|:--|
 | **Kernel** | `5.10.269-Equinox` |
-| **Device** | POCO F5 Pro / Redmi K60 |
-| **Codename** | `mondrian` |
-| **Platform** | Qualcomm SM8475 / waipio |
-| **KernelSU-Next** | `3.4.0` |
-| **SUSFS** | `2.3.0` |
-| **DroidSpaces** | Supported |
-| **TCP BBR** | Supported and verified |
-| **Default TCP CC** | CUBIC |
 | **Toolchain** | Neutron Clang `24.0.0git` |
-| **KMI** | Verified |
-
-> Exact build information and checksums are published with each GitHub Release.
-
----
-
-## ![02](https://img.shields.io/badge/02-38bdf8?style=flat-square&labelColor=0b1020) Features
-
-### Root & Hiding
-
-| Feature | Status |
-|:--|:--:|
-| KernelSU-Next | ✅ Built-in |
-| SUSFS | ✅ Supported |
-| Production root stack | ✅ Integrated |
-
-### Containers
-
-| Feature | Status |
-|:--|:--:|
-| DroidSpaces | ✅ Supported |
-| PID namespaces | ✅ Enabled |
-| IPC / SYSVIPC | ✅ Enabled |
-| KMI-safe integration | ✅ Verified |
-| Linux container startup | ✅ Tested |
-
-### Networking
-
-| Feature | Status |
-|:--|:--:|
-| TCP BBR | ✅ Supported and verified |
-| CUBIC | ✅ Default |
-| Runtime TCP congestion-control switching | ✅ Supported |
-
-BBR is built into Equinox and has been verified on real TCP connections. CUBIC remains the default congestion-control algorithm.
-
-### Kernel & Build
-
-| Feature | Status |
-|:--|:--:|
-| Full LTO | ✅ Enabled |
-| Clang CFI | ✅ Enabled |
-| MODVERSIONS | ✅ Enabled |
-| Production KMI validation | ✅ Enabled |
-| Pinned external dependencies | ✅ Enabled |
-| AnyKernel3 packaging | ✅ Verified |
-
-### Device-specific
-
-- Goodix touch stability fixes for mondrian
-- POCO F5 Pro / Redmi K60 production configuration
-- Android 17 compatible kernel branch
+| **Root stack** | KernelSU-Next `3.4.0` + SUSFS `2.3.0` |
+| **Containers** | DroidSpaces supported |
+| **TCP** | BBR supported and verified · CUBIC default |
+| **Build** | Full LTO · Clang CFI · MODVERSIONS · KMI verified |
 
 ---
 
-## ![03](https://img.shields.io/badge/03-a78bfa?style=flat-square&labelColor=0b1020) Latest Changes
+## Features
+
+| Group | Included |
+|:--|:--|
+| **Root & hiding** | KernelSU-Next · SUSFS |
+| **Containers** | DroidSpaces · PID namespaces · IPC / SYSVIPC |
+| **Networking** | TCP BBR · runtime congestion-control switching · CUBIC default |
+| **Kernel build** | Full LTO · Clang CFI · MODVERSIONS · strict KMI validation |
+| **Device** | mondrian production config · Goodix touch stability fixes |
+| **Packaging** | Verified AnyKernel3 release package |
+
+---
+
+## Latest Changes
 
 ### Linux 5.10.269
 
-- Updated KernelSU-Next to `3.4.0`
-- Integrated SUSFS `2.3.0`
-- Added DroidSpaces support using the KMI-safe production profile
-- Added TCP BBR congestion-control support
-- Verified BBR operation on real TCP connections
-- Kept CUBIC as the default TCP congestion-control algorithm
-- Added strict production KMI validation
-- Added verified AnyKernel3 production packaging
+- KernelSU-Next updated to `3.4.0`
+- SUSFS `2.3.0` integrated
+- DroidSpaces support added with the KMI-safe production profile
+- TCP BBR support added and verified on-device
+- Production KMI validation and verified AnyKernel3 packaging added
 
-[**View releases and full release notes →**](../../releases)
+[View full release notes](../../releases)
 
 ---
 
-## ![04](https://img.shields.io/badge/04-22c55e?style=flat-square&labelColor=0b1020) Downloads
+## Downloads & Flashing
 
-Official Equinox builds are distributed through **GitHub Releases**.
+Official Equinox builds are published through **GitHub Releases**.
 
-### [⬇ Download latest available build](../../releases)
+Current package: `Equinox-5.10.269-mondrian.zip`
 
-Current package:
+Before flashing, back up your current `boot.img` or working kernel and make sure you have a recovery or fastboot restore method. Flash the Equinox AnyKernel3 ZIP from **Assets** and reboot.
 
-`Equinox-5.10.269-mondrian.zip`
-
-Use the Equinox flashable ZIP from **Assets**. GitHub-generated `Source code` archives are not flashable kernel packages.
+> GitHub-generated `Source code` archives are not flashable kernel packages.
 
 ---
 
-## ![05](https://img.shields.io/badge/05-f97316?style=flat-square&labelColor=0b1020) Installation
+## Reporting Issues
 
-1. Back up your current working kernel or `boot.img`.
-2. Make sure you have a working recovery or fastboot restore method.
-3. Download the Equinox ZIP from **Releases**.
-4. Verify the published SHA256 checksum when possible.
-5. Flash the AnyKernel3 package and reboot.
+When reporting a problem, include the kernel version, a short reproduction description and relevant logs: `dmesg`, `logcat`, `pstore / ramoops`, or watchdog / panic logs when available.
 
-Equinox release packages replace the kernel Image while preserving the ROM boot environment.
+[Open an issue](../../issues)
 
 ---
 
-## ![06](https://img.shields.io/badge/06-ef4444?style=flat-square&labelColor=0b1020) Bug Reports
+## Credits & Upstreams
 
-When reporting a problem, include the Equinox kernel version, a clear description and the steps required to reproduce it.
+- **Kernel base:** [LineageOS/android_kernel_xiaomi_sm8450](https://github.com/LineageOS/android_kernel_xiaomi_sm8450), [LineageOS/android_kernel_qcom_sm8450](https://github.com/LineageOS/android_kernel_qcom_sm8450), [Android Common Kernel](https://android.googlesource.com/kernel/common), [Linux](https://www.kernel.org/)
+- **Root:** [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next), [SUSFS](https://gitlab.com/simonpunk/susfs4ksu) by simonpunk, [Zhanfg/susfs4ksu](https://github.com/Zhanfg/susfs4ksu)
+- **Containers:** [DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS) by ravindu644
+- **Toolchain:** [Neutron Clang](https://github.com/Neutron-Toolchains/clang-build-catalogue)
+- **Packaging:** [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by osm0sis
 
-Useful logs:
-
-- `adb bugreport`
-- `logcat`
-- `dmesg`
-- `pstore / ramoops`
-- kernel panic / watchdog logs when available
-
-Reports with logs are significantly easier to investigate.
+Thanks to Qualcomm, Xiaomi, LineageOS and Linux kernel contributors for the underlying platform and upstream work.
 
 ---
 
-## ![07](https://img.shields.io/badge/07-14b8a6?style=flat-square&labelColor=0b1020) Build & Integrity
+## Support Development
 
-Official Equinox builds are produced through the project production pipeline using pinned external dependencies. The production kernel is compared against a known-good baseline before packaging, and release packaging proceeds only after the required KMI checks pass.
-
----
-
-## ![08](https://img.shields.io/badge/08-60a5fa?style=flat-square&labelColor=0b1020) Credits & Upstreams
-
-Equinox Kernel is built on open-source Android and Linux kernel work. Thanks to all upstream developers and contributors whose work makes this project possible.
-
-- **[LF52406](https://github.com/LF52406)**  
-  Developer of Equinox Kernel.
-
-- **[LineageOS/android_kernel_xiaomi_sm8450](https://github.com/LineageOS/android_kernel_xiaomi_sm8450)**  
-  Xiaomi SM8450 device-kernel base and upstream source used by Equinox.
-
-- **[LineageOS/android_kernel_qcom_sm8450](https://github.com/LineageOS/android_kernel_qcom_sm8450)**  
-  Qualcomm SM8450 common-kernel upstream and source of platform fixes.
-
-- **[Android Common Kernel](https://android.googlesource.com/kernel/common)**  
-  Android kernel infrastructure, GKI/KMI work and Android-specific kernel changes.
-
-- **[Linux Kernel](https://www.kernel.org/)**  
-  Linux upstream and stable kernel development.
-
-- **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)**  
-  Kernel root implementation used by Equinox.
-
-- **[SUSFS](https://gitlab.com/simonpunk/susfs4ksu)** by **simonpunk**  
-  Original SUSFS project.
-
-- **[Zhanfg/susfs4ksu](https://github.com/Zhanfg/susfs4ksu)**  
-  Android 13 / Linux 5.10 SUSFS integration source used by the Equinox production build.
-
-- **[DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS)** by **ravindu644**  
-  Android/Linux container runtime supported by Equinox.
-
-- **[Neutron Clang](https://github.com/Neutron-Toolchains/clang-build-catalogue)**  
-  LLVM/Clang toolchain used for official Equinox production builds.
-
-- **[Neutron antman](https://github.com/Neutron-Toolchains/antman)**  
-  Toolchain compatibility utility used by the Equinox build system when required by the build host.
-
-- **[AnyKernel3](https://github.com/osm0sis/AnyKernel3)** by **osm0sis**  
-  Flashable kernel packaging framework used for Equinox releases.
-
-- **Qualcomm, Xiaomi, LineageOS and Linux kernel contributors**  
-  Device, SoC, driver and kernel work used by the mondrian / SM8475 platform.
-
----
-
-## ![09](https://img.shields.io/badge/09-ec4899?style=flat-square&labelColor=0b1020) Support Development
-
-Equinox Kernel is developed independently.
-
-If you find Equinox useful and would like to support its continued development, you can make a voluntary donation. Contributions help cover build-server costs, development infrastructure, testing and future kernel work.
-
-Support is completely optional, and every contribution is appreciated.
+If you like Equinox Kernel and want to support its continued development, voluntary donations help cover build-server costs, development infrastructure and testing. Support is completely optional and always appreciated.
 
 <div align="center">
 
 [![PayPal](https://img.shields.io/badge/PayPal-Support-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.me/LF52406)
 [![Patreon](https://img.shields.io/badge/Patreon-Support-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/InfernalGT)
 [![Boosty](https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/infernalgt/donate)
-
-</div>
-
----
-
-<div align="center">
-
-### Equinox Kernel
-
-**Developer:** [LF52406](https://github.com/LF52406)
-
-POCO F5 Pro / Redmi K60 · `mondrian`
-
-[Releases](../../releases) · [Issues](../../issues)
 
 </div>
