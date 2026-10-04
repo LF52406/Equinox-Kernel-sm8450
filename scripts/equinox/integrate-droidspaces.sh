@@ -51,8 +51,7 @@ old_reserves = (
 new_reserves = (
     "#ifdef CONFIG_SYSVIPC\n"
     "\tANDROID_KABI_USE(6, struct sysv_sem sysvsem);\n"
-    "\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8),\n"
-    "\t\t\t      struct sysv_shm sysvshm);\n"
+    "\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm);\n"
     "#else\n"
     "\tANDROID_KABI_RESERVE(6);\n"
     "\tANDROID_KABI_RESERVE(7);\n"
@@ -69,12 +68,10 @@ open(path, "w", encoding="utf-8").write(s)
 print("[+] SYSVIPC relocated: sysvsem -> reserve 6, sysvshm -> reserves 7+8")
 PY
 
-# Linux 5.10 GKI also needs DroidSpaces' POSIX_MQUEUE KABI fix. Enabling
-# CONFIG_POSIX_MQUEUE normally inserts mq_bytes into struct user_struct and
-# changes CRCs for a very large part of the exported KMI. Store mq_bytes in
-# Android KABI reserve 1 instead, matching the upstream DroidSpaces GKI patch.
+# DroidSpaces' GKI 5.10-or-lower patch moves mq_bytes out of its normal
+# user_struct position and consumes Android KABI reserve 1. Keep the exact
+# reserve ordering used by the upstream patch so genksyms sees the old ABI.
 python3 - "$SCHED_USER" <<'PY'
-import re
 import sys
 
 path = sys.argv[1]
@@ -84,45 +81,31 @@ if "ANDROID_KABI_USE(1, unsigned long mq_bytes)" in s:
     print("[=] DroidSpaces POSIX_MQUEUE KMI relocation already present")
     raise SystemExit(0)
 
-field_re = re.compile(
-    r'(^#ifdef CONFIG_POSIX_MQUEUE\n'
-    r'(?P<body>(?:[^\n]*\n)*?)'
-    r'^[ \t]*unsigned long mq_bytes;[^\n]*\n'
-    r'(?P<tail>(?:[^\n]*\n)*?)'
-    r'^#endif\n)',
-    re.M,
-)
-match = field_re.search(s)
-if not match:
+old_field = "\tunsigned long mq_bytes;\t/* How many bytes can be allocated to mqueue? */"
+new_field = "\t//unsigned long mq_bytes;\t/* How many bytes can be allocated to mqueue? */"
+if s.count(old_field) != 1:
     raise SystemExit("[!] user_struct POSIX_MQUEUE mq_bytes anchor changed; refusing an unsafe edit")
+s = s.replace(old_field, new_field, 1)
 
-block = match.group(0)
-block = re.sub(
-    r'^[ \t]*unsigned long mq_bytes;[^\n]*$',
-    '\t/* mq_bytes is stored in Android KABI reserve 1 below. */',
-    block,
-    count=1,
-    flags=re.M,
+old_reserves = (
+    "\tANDROID_KABI_RESERVE(1);\n"
+    "\tANDROID_KABI_RESERVE(2);\n"
+    "\tANDROID_OEM_DATA_ARRAY(1, 2);\n"
 )
-s = s[:match.start()] + block + s[match.end():]
-
-reserve_re = re.compile(
-    r'(?P<indent>[ \t]*)ANDROID_OEM_DATA_ARRAY\(1, 2\);\n'
-    r'(?P=indent)ANDROID_KABI_RESERVE\(1\);'
-)
-reserve_match = reserve_re.search(s)
-if not reserve_match:
-    raise SystemExit("[!] user_struct KABI reserve 1 anchor changed; refusing an unsafe edit")
-indent = reserve_match.group('indent')
-replacement = (
-    f"{indent}ANDROID_OEM_DATA_ARRAY(1, 2);\n"
-    "#ifdef CONFIG_POSIX_MQUEUE\n"
-    f"{indent}ANDROID_KABI_USE(1, unsigned long mq_bytes);\n"
+new_reserves = (
+    "#if defined(CONFIG_POSIX_MQUEUE)\n"
+    "\tANDROID_KABI_USE(1, unsigned long mq_bytes);\n"
+    "\tANDROID_KABI_RESERVE(2);\n"
+    "\tANDROID_OEM_DATA_ARRAY(1, 2);\n"
     "#else\n"
-    f"{indent}ANDROID_KABI_RESERVE(1);\n"
-    "#endif"
+    "\tANDROID_KABI_RESERVE(1);\n"
+    "\tANDROID_KABI_RESERVE(2);\n"
+    "\tANDROID_OEM_DATA_ARRAY(1, 2);\n"
+    "#endif\n"
 )
-s = s[:reserve_match.start()] + replacement + s[reserve_match.end():]
+if s.count(old_reserves) != 1:
+    raise SystemExit("[!] user_struct KABI reserve block changed; refusing an unsafe edit")
+s = s.replace(old_reserves, new_reserves, 1)
 
 open(path, "w", encoding="utf-8").write(s)
 print("[+] POSIX_MQUEUE relocated: mq_bytes -> user_struct reserve 1")
@@ -170,13 +153,12 @@ print(f"[+] KernelSU/SUSFS Kconfig indentation normalized ({changed} line(s))")
 PY
 fi
 
-# Validate that the two mandatory DroidSpaces GKI KABI relocations exist and
-# that the original ABI-sensitive storage locations are not active anymore.
+# Validate both mandatory DroidSpaces GKI KABI relocations.
 grep -q 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem)' "$SCHED" || {
     echo '[!] SYSVIPC reserve 6 relocation missing'
     exit 1
 }
-grep -q '_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8),' "$SCHED" || {
+grep -q '_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm)' "$SCHED" || {
     echo '[!] SYSVIPC reserves 7+8 relocation missing'
     exit 1
 }
