@@ -1,9 +1,5 @@
 <div align="center">
 
-<img src="assets/equinox-banner.png" alt="Equinox Kernel" width="100%">
-
-<br>
-
 [![Latest Release](https://img.shields.io/github/v/release/LF52406/Equinox-Kernel-sm8450?display_name=tag&style=for-the-badge&label=RELEASE&labelColor=0b1020&color=f59e0b)](../../releases)
 [![Linux](https://img.shields.io/badge/Linux-5.10.269-38bdf8?style=for-the-badge&labelColor=0b1020)](https://www.kernel.org/)
 [![KernelSU Next](https://img.shields.io/badge/KernelSU--Next-3.4.0-a78bfa?style=for-the-badge&labelColor=0b1020)](https://github.com/KernelSU-Next/KernelSU-Next)
