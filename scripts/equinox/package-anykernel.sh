@@ -117,8 +117,10 @@ Changes:
 - Built with pinned Neutron Clang
 - Integrated KernelSU-Next 3.3.0
 - Integrated SUSFS 2.3.0
-- Added DroidSpaces support with GKI KMI-safe configuration
-- Preserved Android KABI for SYSVIPC task_struct fields
+- Added DroidSpaces GKI support
+- Applied Android KABI relocation for SYSVIPC task_struct fields
+- Applied Android KABI relocation for POSIX_MQUEUE user_struct mq_bytes
+- Used minimal DroidSpaces GKI production configuration
 - Full LTO enabled
 - Clang CFI enabled
 - MODVERSIONS enabled
