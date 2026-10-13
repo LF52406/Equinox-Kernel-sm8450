@@ -276,7 +276,7 @@ open(path, 'w', encoding='utf-8').write(s)
 print('[+] SUSFS init wired into kernelsu_init')
 PY
 
-# Keep KernelSU-Next v3.3.0's manager/setuid logic and only add the SUSFS
+# Keep upstream KernelSU-Next manager/setuid logic and only add the SUSFS
 # process state around the existing kernel-umount transition.
 python3 - "$KSUN_DIR/kernel/hook/setuid_hook.c" <<'PY'
 import sys
@@ -304,7 +304,7 @@ old = '    // Handle kernel umount\n    ksu_handle_umount(old_uid, new_uid);\n\n
 if old not in s:
     raise SystemExit('[!] KernelSU kernel-umount anchor changed')
 new = r'''#ifdef CONFIG_KSU_SUSFS
-    /* Equinox SUSFS process state. Keep KernelSU-Next v3.3.0's manager and
+    /* Equinox SUSFS process state. Keep upstream KernelSU-Next's manager and
      * allowlist logic above intact; only specialize the zygote transition. */
     if (susfs_is_current_zygote_domain()) {
         if (is_isolated_process(new_uid) ||
@@ -520,4 +520,4 @@ fi
 
 git diff --check
 
-echo "[+] KernelSU-Next v3.3.0 + SUSFS v2.3.0 source integration prepared"
+echo "[+] KernelSU-Next + SUSFS v2.3.0 source integration prepared"
