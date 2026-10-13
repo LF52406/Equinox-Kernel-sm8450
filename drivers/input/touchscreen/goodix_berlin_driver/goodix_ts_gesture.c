@@ -334,10 +334,11 @@ static int gsx_gesture_before_suspend(struct goodix_ts_core *cd,
 		return EVT_CONTINUE;
 
 	ret = hw_ops->gesture(cd, 0);
-	if (ret)
+	if (ret) {
 		ts_err("failed enter gesture mode");
-	else
-		ts_info("enter gesture mode, type[0x%02X]", cd->gesture_type);
+		return EVT_CONTINUE;
+	}
+	ts_info("enter gesture mode, type[0x%02X]", cd->gesture_type);
 
 	/*
 	 * Drain any coordinate/gesture status left by the active scan before

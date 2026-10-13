@@ -689,8 +689,8 @@ static ssize_t goodix_ts_irq_info_show(struct device *dev,
 
 	offset += r;
 	r = scnprintf(&buf[offset], PAGE_SIZE - offset,
-			"touch-guard-suppressed-contacts:%lld\n",
-			(long long)atomic64_read(&core_data->touch_guard.suppressed_contacts));
+			"touch-guard-forced-releases:%lld\n",
+			(long long)atomic64_read(&core_data->touch_guard.forced_releases));
 	if (r < 0)
 		return -EINVAL;
 
@@ -1268,6 +1268,20 @@ static void goodix_ts_release_touch_slots_locked(struct input_dev *dev)
 	input_sync(dev);
 }
 
+static void goodix_ts_release_connects(struct goodix_ts_core *core_data);
+
+/*
+ * A corrupt/unreadable frame does not prove that the finger was lifted.
+ * Preserve Linux MT slots until a valid controller frame reconciles them;
+ * explicit controller reset and suspend already release contacts safely.
+ * Never synthesize UP just because consecutive IRQ frames were rejected:
+ * a still-held finger would then appear as a second DOWN to Android.
+ */
+static void goodix_ts_invalidate_frame(struct goodix_ts_core *cd)
+{
+	atomic64_inc(&cd->touch_guard.invalid_frames);
+}
+
 static bool goodix_ts_validate_touch_frame(struct goodix_ts_core *cd,
 		struct goodix_touch_data *touch_data, u16 *raw_mask)
 {
@@ -1307,88 +1321,35 @@ static bool goodix_ts_validate_touch_frame(struct goodix_ts_core *cd,
 }
 
 static void goodix_ts_report_finger(struct input_dev *dev,
-		struct goodix_touch_data *touch_data,
-		bool invert_xy)
+		struct goodix_touch_data *touch_data, bool invert_xy)
 {
 	struct goodix_ts_core *cd = input_get_drvdata(dev);
 	struct goodix_touch_guard *guard = &cd->touch_guard;
 	u16 raw_mask = 0;
-	u16 old_reported;
-	u16 old_candidates;
-	u16 promoted;
-	u16 dropped;
-	u16 new_candidates;
-	u16 new_reported;
-	unsigned int x;
-	unsigned int y;
-	unsigned int w;
+	u16 newly_reported;
+	unsigned int x, y, w;
 	int resolution_factor;
 	int i;
 
-	mutex_lock(&dev->mutex);
-
 	if (!goodix_ts_validate_touch_frame(cd, touch_data, &raw_mask)) {
-		atomic64_inc(&guard->invalid_frames);
-
-		if (guard->candidate_mask) {
-			atomic64_add(goodix_touch_mask_count(guard->candidate_mask),
-					&guard->suppressed_contacts);
-			guard->candidate_mask = 0;
-		}
-
-		if (guard->invalid_frame_streak < U8_MAX)
-			guard->invalid_frame_streak++;
-
-		/*
-		 * Quarantine one malformed frame without changing Linux input
-		 * state. If corruption persists for a second frame, release all
-		 * slots so a stale contact can never remain stuck indefinitely.
-		 */
-		if (guard->invalid_frame_streak >= 2 && guard->reported_mask) {
-			goodix_ts_release_touch_slots_locked(dev);
-			guard->reported_mask = 0;
-		}
-
-		ts_debug("reject malformed touch frame, touch_num=%d streak=%u",
-			touch_data->touch_num, guard->invalid_frame_streak);
-		mutex_unlock(&dev->mutex);
+		goodix_ts_invalidate_frame(cd);
+		ts_debug("reject malformed touch frame, touch_num=%d",
+				touch_data->touch_num);
 		return;
 	}
 
-	guard->invalid_frame_streak = 0;
-	old_reported = guard->reported_mask;
-	old_candidates = guard->candidate_mask;
-
-	/*
-	 * A new hardware contact is never exposed immediately. It first
-	 * becomes a candidate and is promoted only if the same hardware ID is
-	 * still present in the following controller frame. Confirmed contacts
-	 * and releases are not delayed. At 240/480 Hz this adds only one
-	 * controller frame (about 4.2/2.1 ms) to a new DOWN event while
-	 * eliminating transient checksum-valid ghost contacts before Android.
-	 */
-	promoted = old_candidates & raw_mask;
-	dropped = old_candidates & ~raw_mask;
-	new_candidates = raw_mask & ~(old_reported | old_candidates);
-	new_reported = (old_reported & raw_mask) | promoted;
-
-	if (promoted)
-		atomic64_add(goodix_touch_mask_count(promoted),
+	mutex_lock(&dev->mutex);
+	newly_reported = raw_mask & ~guard->reported_mask;
+	guard->reported_mask = raw_mask;
+	if (newly_reported)
+		atomic64_add(goodix_touch_mask_count(newly_reported),
 				&guard->confirmed_contacts);
-	if (dropped)
-		atomic64_add(goodix_touch_mask_count(dropped),
-				&guard->suppressed_contacts);
 
-	guard->reported_mask = new_reported;
-	guard->candidate_mask = new_candidates;
-
-	if (dropped)
-		ts_debug("suppressed transient touch mask 0x%04x", dropped);
-
+	/* Report validated DOWN events immediately, including single-frame taps. */
 	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
 		input_mt_slot(dev, i);
 
-		if (!(new_reported & BIT(i))) {
+		if (!(raw_mask & BIT(i))) {
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
 			continue;
 		}
@@ -1432,7 +1393,7 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 		input_report_abs(dev, ABS_MT_TOUCH_MAJOR, w);
 	}
 
-	input_report_key(dev, BTN_TOUCH, new_reported ? 1 : 0);
+	input_report_key(dev, BTN_TOUCH, raw_mask ? 1 : 0);
 	input_sync(dev);
 
 	mutex_unlock(&dev->mutex);
@@ -1446,8 +1407,11 @@ static int goodix_ts_request_handle(struct goodix_ts_core *cd,
 
 	if (ts_event->request_code == REQUEST_TYPE_CONFIG)
 		ret = goodix_send_ic_config(cd, CONFIG_TYPE_NORMAL);
-	else if (ts_event->request_code == REQUEST_TYPE_RESET)
+	else if (ts_event->request_code == REQUEST_TYPE_RESET) {
+		if (cd->input_dev)
+			goodix_ts_release_connects(cd);
 		ret = hw_ops->reset(cd, GOODIX_NORMAL_RESET_DELAY_MS);
+	}
 	else
 		ts_info("can not handle request type 0x%x",
 			ts_event->request_code);
@@ -1509,6 +1473,9 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 		}
 		if (ts_event->event_type == EVENT_REQUEST)
 			goodix_ts_request_handle(core_data, ts_event);
+	} else {
+		/* Count read/parser failures without a second event acknowledge. */
+		goodix_ts_invalidate_frame(core_data);
 	}
 
 	return IRQ_HANDLED;
@@ -1838,6 +1805,8 @@ static void goodix_ts_esd_work(struct work_struct *work)
 	ret = hw_ops->esd_check(cd);
 	if (ret) {
 		ts_err("esd check failed");
+		if (cd->input_dev)
+			goodix_ts_release_connects(cd);
 		goodix_ts_power_off(cd);
 		usleep_range(5000, 5100);
 		goodix_ts_power_on(cd);
@@ -1951,8 +1920,6 @@ static void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 	mutex_lock(&input_dev->mutex);
 	goodix_ts_release_touch_slots_locked(input_dev);
 	core_data->touch_guard.reported_mask = 0;
-	core_data->touch_guard.candidate_mask = 0;
-	core_data->touch_guard.invalid_frame_streak = 0;
 	mutex_unlock(&input_dev->mutex);
 }
 
@@ -2161,6 +2128,7 @@ static void goodix_set_gesture_work(struct work_struct *work)
 	}
 
 	pm_stay_awake(core_data->bus->dev);
+	atomic_set(&core_data->gesture_reporting_allowed, 0);
 
 	target_gesture_type =
 		core_data->nonui_enabled ? 0 : core_data->gesture_type;
@@ -2192,6 +2160,9 @@ static void goodix_set_gesture_work(struct work_struct *work)
 				res);
 	}
 	hw_ops->irq_enable(core_data, true);
+	if (!res && atomic_read(&core_data->suspended) &&
+			atomic_read(&core_data->panel_blank_complete))
+		atomic_set(&core_data->gesture_reporting_allowed, 1);
 
 exit:
 	pm_relax(core_data->bus->dev);
@@ -2439,6 +2410,8 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 	switch (action) {
 	case NOTIFY_FWUPDATE_START:
 		hw_ops->irq_enable(cd, 0);
+		if (cd->input_dev)
+			goodix_ts_release_connects(cd);
 		break;
 	case NOTIFY_FWUPDATE_SUCCESS:
 	case NOTIFY_FWUPDATE_FAILED:
@@ -2792,7 +2765,7 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	atomic_set(&core_data->gesture_reporting_allowed, 0);
 	atomic_set(&core_data->panel_blank_complete, 0);
 	atomic64_set(&core_data->touch_guard.invalid_frames, 0);
-	atomic64_set(&core_data->touch_guard.suppressed_contacts, 0);
+	atomic64_set(&core_data->touch_guard.forced_releases, 0);
 	atomic64_set(&core_data->touch_guard.confirmed_contacts, 0);
 	atomic64_set(&core_data->touch_guard.transition_gesture_drops, 0);
 

@@ -15,6 +15,7 @@
   * General Public License for more details.
   *
   */
+#include <linux/bitops.h>
 #include "goodix_ts_core.h"
 
 /* berlin_A SPI mode setting */
@@ -1103,21 +1104,24 @@ static int brl_esd_check(struct goodix_ts_core *cd)
 #define POINT_TYPE_STYLUS_HOVER		0x01
 #define POINT_TYPE_STYLUS			0x03
 
-static void goodix_parse_finger(struct goodix_touch_data *touch_data,
+static int goodix_parse_finger(struct goodix_touch_data *touch_data,
 				u8 *buf, int touch_num)
 {
-	unsigned int id = 0, x = 0, y = 0, w = 0;
-	u8 *coor_data;
+	unsigned int id, x, y, w;
+	u16 seen = 0;
+	u8 *coor_data = &buf[IRQ_EVENT_HEAD_LEN];
 	int i;
 
-	coor_data = &buf[IRQ_EVENT_HEAD_LEN];
+	if (touch_num < 0 || touch_num > GOODIX_MAX_TOUCH)
+		return -EINVAL;
+
 	for (i = 0; i < touch_num; i++) {
 		id = (coor_data[0] >> 4) & 0x0F;
-		if (id >= GOODIX_MAX_TOUCH) {
-			ts_info("invalid finger id =%d", id);
-			touch_data->touch_num = 0;
-			return;
+		if (id >= GOODIX_MAX_TOUCH || (seen & BIT(id))) {
+			ts_info("invalid or duplicate finger id =%u", id);
+			return -EINVAL;
 		}
+		seen |= BIT(id);
 		x = le16_to_cpup((__le16 *)(coor_data + 2));
 		y = le16_to_cpup((__le16 *)(coor_data + 4));
 		w = le16_to_cpup((__le16 *)(coor_data + 6));
@@ -1128,6 +1132,7 @@ static void goodix_parse_finger(struct goodix_touch_data *touch_data,
 		coor_data += BYTES_PER_POINT;
 	}
 	touch_data->touch_num = touch_num;
+	return 0;
 }
 
 static unsigned int goodix_pen_btn_code[] = {BTN_STYLUS, BTN_STYLUS2};
@@ -1241,7 +1246,9 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 		/* stylus info */
 		if (pre_finger_num) {
 			ts_event->event_type = EVENT_TOUCH;
-			goodix_parse_finger(touch_data, buffer, 0);
+			ret = goodix_parse_finger(touch_data, buffer, 0);
+			if (ret)
+				return ret;
 			pre_finger_num = 0;
 		} else {
 			pre_pen_num = 1;
@@ -1256,7 +1263,9 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 			pre_pen_num = 0;
 		} else {
 			ts_event->event_type = EVENT_TOUCH;
-			goodix_parse_finger(touch_data, buffer, touch_num);
+			ret = goodix_parse_finger(touch_data, buffer, touch_num);
+			if (ret)
+				return ret;
 			pre_finger_num = touch_num;
 		}
 	}
@@ -1289,12 +1298,16 @@ static int brl_event_handler(struct goodix_ts_core *cd,
 
 	if (pre_buf[0] == 0x00) {
 		ts_debug("invalid touch head");
+		if (hw_ops->after_event_handler)
+			hw_ops->after_event_handler(cd);
 		return -EINVAL;
 	}
 
 	if (checksum_cmp(pre_buf, IRQ_EVENT_HEAD_LEN, CHECKSUM_MODE_U8_LE)) {
 		ts_debug("touch head checksum err[%*ph]",
 				IRQ_EVENT_HEAD_LEN, pre_buf);
+		if (hw_ops->after_event_handler)
+			hw_ops->after_event_handler(cd);
 		return -EINVAL;
 	}
 
