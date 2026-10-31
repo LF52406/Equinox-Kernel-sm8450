@@ -1,0 +1,37 @@
+name: Equinox Linux 5.10.273 staging integration
+
+on:
+  push:
+    branches:
+      - update/equinox-linux-5.10.273-staging-20261031
+    paths:
+      - .github/workflows/equinox-stable-5.10.273.yml
+      - scripts/equinox/update-stable-5.10.273.sh
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: equinox-stable-staging
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    name: Integrate upstream series without dropping Android changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Validate update helper
+        run: |
+          bash -n scripts/equinox/update-stable-5.10.273.sh
+          test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -1)" = "269"
+      - name: Apply official Linux 5.10.270..273 patches in isolated worktree
+        env:
+          EQUINOX_PUSH_STAGING: "1"
+        run: |
+          bash scripts/equinox/update-stable-5.10.273.sh
