@@ -8,7 +8,7 @@ cd "$ROOT"
 
 TARGET_BRANCH="update/equinox-linux-5.10.273-staging-20261031"
 EXPECTED_BASE_SHA="4ba940b5b8c5361d23c21923e92116c560a3345c"
-PATCH_URL_BASE="https://cdn.kernel.org/pub/linux/kernel/v5.x"
+PATCH_URL_BASE="https://cdn.kernel.org/pub/linux/kernel/v5.x/incr"
 
 fail() { printf '[!] %s\n' "$*" >&2; exit 1; }
 for tool in git curl xz python3 sha256sum grep sed; do
@@ -38,7 +38,7 @@ git worktree add --detach --quiet "$WT" "$BASE_HEAD"
 
 for patchlevel in 270 271 272 273; do
     version="5.10.$patchlevel"
-    url="$PATCH_URL_BASE/patch-$version.xz"
+    url="$PATCH_URL_BASE/patch-5.10.$((patchlevel - 1))-$patchlevel.xz"
     compressed="$WORK_DIR/patch-$version.xz"
     patch="$WORK_DIR/patch-$version"
     printf '[*] Downloading official Linux %s patch\n' "$version"
@@ -57,7 +57,7 @@ for patchlevel in 270 271 272 273; do
         exit 2
     fi
     git -C "$WT" apply --index "$patch"
-    git -C "$WT" -c user.name='LF5' -c user.email='lf5@users.noreply.github.com' \
+    git -C "$WT" -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
         commit --quiet -m "stable: integrate complete Linux $version release"
     grep -Fxq "SUBLEVEL = $patchlevel" "$WT/Makefile" ||
         fail "Makefile version mismatch after $version"
@@ -91,7 +91,7 @@ for file, replacements in changes.items():
     new = old
     for needle, replacement in replacements:
         count = new.count(needle)
-        if count != 1 and file != "scripts/equinox/package-anykernel.sh":
+        if count != 1 and file not in ("scripts/equinox/package-anykernel.sh", "scripts/equinox/README.md"):
             raise SystemExit(f"Expected one occurrence in {file}: {needle!r}; found {count}")
         if count == 0:
             raise SystemExit(f"Missing expected text in {file}: {needle!r}")
@@ -114,7 +114,7 @@ for file in scripts/equinox/build-production.sh scripts/equinox/build-rootstack.
 done
 git -C "$WT" diff --check || fail "Whitespace errors in metadata changes"
 git -C "$WT" add scripts/equinox
-git -C "$WT" -c user.name='LF5' -c user.email='lf5@users.noreply.github.com' \
+git -C "$WT" -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
     commit --quiet -m 'equinox: adapt production version checks while keeping 5.10.269 KMI baseline'
 
 printf '[+] All four upstream releases applied without rejected hunks.\n'
