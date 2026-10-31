@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: equinox-stable-staging
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   integrate:
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 12
           persist-credentials: true
       - name: Validate update helper
         run: |
