@@ -27,7 +27,7 @@ jobs:
           persist-credentials: true
       - name: Verify source-port helper
         run: |
-          python3 -m py_compile scripts/equinox/merge-stable-5.10.273.py
+          python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("scripts/equinox/merge-stable-5.10.273.py").read_text())'
           test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -1)" = "269"
       - name: Integrate Linux 5.10.273 source changes into staging
         run: |
