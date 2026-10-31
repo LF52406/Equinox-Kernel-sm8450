@@ -1,4 +1,4 @@
-name: Equinox Linux 5.10.273 staging integration
+name: Equinox Linux 5.10.273 source-port staging
 
 on:
   push:
@@ -6,7 +6,6 @@ on:
       - update/equinox-linux-5.10.273-staging-20261031
     paths:
       - .github/workflows/equinox-stable-5.10.273.yml
-      - scripts/equinox/update-stable-5.10.273.sh
   workflow_dispatch:
 
 permissions:
@@ -18,20 +17,18 @@ concurrency:
 
 jobs:
   integrate:
-    name: Integrate upstream series without dropping Android changes
+    name: Stage real upstream changes with three-way source merges
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 12
+          fetch-depth: 0
           persist-credentials: true
-      - name: Validate update helper
+      - name: Verify source-port helper
         run: |
-          bash -n scripts/equinox/update-stable-5.10.273.sh
+          python3 -m py_compile scripts/equinox/merge-stable-5.10.273.py
           test "$(sed -n 's/^SUBLEVEL = //p' Makefile | head -1)" = "269"
-      - name: Apply official Linux 5.10.270..273 patches in isolated worktree
-        env:
-          EQUINOX_PUSH_STAGING: "1"
+      - name: Integrate Linux 5.10.273 source changes into staging
         run: |
-          bash scripts/equinox/update-stable-5.10.273.sh
+          python3 scripts/equinox/merge-stable-5.10.273.py
